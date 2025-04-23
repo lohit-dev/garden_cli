@@ -1,0 +1,38 @@
+[package]
+name = "garden_cli"
+version = "0.1.0"
+edition = "2024"
+authors = ["King Grey"]
+description = "CLI tool for creating and managing cross-chain orders"
+
+
+[dependencies]
+# clap = "4.5.37"
+clap = { version = "4.4", features = ["derive"] }
+dialoguer = "0.11.0"
+console = "0.15.11"
+# sha2 = "0.10"
+hex = "0.4.3"
+thiserror = "2.0.12"
+anyhow = "1.0.98"
+
+# Evm Relay Dependencies
+tokio = { version = "1.39.2", features = ["full", "rt-multi-thread"] }
+reqwest = "0.12.5"
+serde = { version = "1.0.204", features = ["derive"] }
+serde_json = "1.0"
+chrono = { version = "0.4.38", features = ["serde"] }
+bigdecimal = { version = "0.4.0", features = ["serde"] }
+alloy-primitives = "0.8.23"
+alloy = { version = "0.8.0", features = ["full", "node-bindings", "eip712"] }
+tracing = "0.1"
+tracing-subscriber = "0.3"
+async-channel = "2.1.0"
+eyre = "0.6.12"
+sha2 = "0.10.8"
+futures = "0.3.31"
+rand = "0.8.5"
+
+[[bin]]
+name = "order-cli"
+path = "src/main.rs"
