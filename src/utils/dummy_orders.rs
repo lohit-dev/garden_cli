@@ -1,4 +1,4 @@
-use crate::models::order::Order;
+use crate::models::order::LoadOrder;
 use eyre::Result;
 use serde::{Deserialize, Serialize};
 use std::fs::File;
@@ -7,7 +7,7 @@ use std::path::Path;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DummyOrders {
-    pub orders: Vec<Order>,
+    pub orders: Vec<LoadOrder>,
 }
 
 pub fn load_dummy_orders(file_path: &Path) -> Result<DummyOrders> {
@@ -21,7 +21,7 @@ pub fn find_order_by_chains(
     orders: &DummyOrders,
     source_chain: &str,
     destination_chain: &str,
-) -> Option<Order> {
+) -> Option<LoadOrder> {
     orders
         .orders
         .iter()

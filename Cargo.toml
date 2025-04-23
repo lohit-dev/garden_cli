@@ -7,11 +7,9 @@ description = "CLI tool for creating and managing cross-chain orders"
 
 
 [dependencies]
-# clap = "4.5.37"
 clap = { version = "4.4", features = ["derive"] }
 dialoguer = "0.11.0"
 console = "0.15.11"
-# sha2 = "0.10"
 hex = "0.4.3"
 thiserror = "2.0.12"
 anyhow = "1.0.98"
@@ -34,5 +32,5 @@ futures = "0.3.31"
 rand = "0.8.5"
 
 [[bin]]
-name = "order-cli"
+name = "garden_cli"
 path = "src/main.rs"

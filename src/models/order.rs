@@ -3,6 +3,37 @@ use bigdecimal::BigDecimal;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+pub enum Status {
+    Ok,
+    Error,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ApiResponse<T> {
+    pub status: Status,
+    pub data: Option<T>,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct AttestedData {
+    pub sig: String,
+    pub input_token_price: f64,
+    pub output_token_price: f64,
+    pub bitcoin_optional_recipient: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct AttestedResponse {
+    pub result: AtttestedResult,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct AtttestedResult {
+    pub additional_data: AttestedData,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Order<T = AdditonalData> {
     pub source_chain: String,
     pub destination_chain: String,
@@ -20,6 +51,22 @@ pub struct Order<T = AdditonalData> {
     pub additional_data: T,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct LoadOrder<T = AdditonalData> {
+    pub source_chain: String,
+    pub destination_chain: String,
+    pub source_asset: String,
+    pub destination_asset: String,
+    pub initiator_source_address: String,
+    pub initiator_destination_address: String,
+    pub source_amount: BigDecimal,
+    pub destination_amount: BigDecimal,
+    pub fee: BigDecimal,
+    pub nonce: BigDecimal,
+    pub min_destination_confirmations: i64,
+    pub timelock: i64,
+    pub additional_data: T,
+}
 impl Order<AdditonalData> {
     pub fn signable_order(&self) -> Order<SignableAdditionalData> {
         let o = self.clone();
