@@ -1,16 +1,35 @@
 use crate::models::additional_data::{AdditonalData, SignableAdditionalData};
+use alloy::primitives::{Address, FixedBytes, Uint};
+use alloy::sol;
 use bigdecimal::BigDecimal;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+sol! {
+    struct Initiate {
+        address redeemer;
+        uint256 timelock;
+        uint256 amount;
+        bytes32 secretHash;
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct InitiateRequest {
+    pub order_id: String,
+    pub signature: String,
+    pub perform_on: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub enum Status {
     Ok,
     Error,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ApiResponse<T> {
     pub status: Status,
+    #[serde(rename = "result")]
     pub data: Option<T>,
     pub error: Option<String>,
 }

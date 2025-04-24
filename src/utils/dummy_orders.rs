@@ -68,14 +68,14 @@ pub fn find_quote_by_chains(
             if parts.len() != 2 {
                 return false;
             }
-            
+
             let source_parts: Vec<&str> = parts[0].split(":").collect();
             let dest_parts: Vec<&str> = parts[1].split(":").collect();
-            
+
             if source_parts.len() < 1 || dest_parts.len() < 1 {
                 return false;
             }
-            
+
             source_parts[0] == source_chain && dest_parts[0] == destination_chain
         })
         .cloned()
@@ -88,7 +88,7 @@ pub fn list_available_chain_pairs(quotes: &DummyQuotes) -> Vec<(String, String)>
         if parts.len() == 2 {
             let source_parts: Vec<&str> = parts[0].split(":").collect();
             let dest_parts: Vec<&str> = parts[1].split(":").collect();
-            
+
             if source_parts.len() >= 1 && dest_parts.len() >= 1 {
                 let pair = (source_parts[0].to_string(), dest_parts[0].to_string());
                 if !pairs.contains(&pair) {

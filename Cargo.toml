@@ -1,5 +1,5 @@
 [package]
-name = "garden_cli"
+name = "garden-cli"
 version = "0.1.0"
 edition = "2024"
 authors = ["King Grey"]
@@ -7,6 +7,7 @@ description = "CLI tool for creating and managing cross-chain orders"
 
 
 [dependencies]
+# CLI Dependencies
 clap = { version = "4.4", features = ["derive"] }
 dialoguer = "0.11.0"
 console = "0.15.11"
@@ -32,5 +33,5 @@ futures = "0.3.31"
 rand = "0.8.5"
 
 [[bin]]
-name = "garden_cli"
+name = "garden-cli"
 path = "src/main.rs"

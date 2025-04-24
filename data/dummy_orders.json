@@ -4,11 +4,6 @@
       "order_pair": "arbitrum_sepolia:0x795Dcb58d1cd4789169D5F938Ea05E17ecEB68cA::starknet_sepolia:0x75cf614ce4ebce29ac622a50cd5151ddfff853159707589a85dd67b9fb1eba",
       "amount": "10000",
       "exact_out": false
-    },
-    {
-      "order_pair": "arbitrum_sepolia:0x795Dcb58d1cd4789169D5F938Ea05E17ecEB68cA::ethereum_sepolia:0xfAd20D08e79c41deE4501648E2EF182965CCFBb4",
-      "amount": "10000",
-      "exact_out": false
     }
   ]
 }

@@ -41,6 +41,7 @@ impl QuoteService {
             .client
             .get(&url)
             .header("accept", "application/json")
+            .header("api-key", &self.api_key)
             .send()
             .await?;
 
@@ -107,6 +108,7 @@ impl QuoteService {
             .post("https://testnet.api.hashira.io/quote/attested")
             .header("accept", "application/json")
             .header("Content-Type", "application/json")
+            .header("api-key", &self.api_key)
             .json(&payload)
             .send()
             .await?;

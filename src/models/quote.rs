@@ -1,6 +1,6 @@
+use alloy::sol;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use alloy::sol;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct QuoteRequest {
