@@ -355,11 +355,11 @@ impl OrderService {
         // Create the Initiate struct
         info!("📦 Creating initiate struct for order {}", order_id);
         let initiate = Initiate {
-            redeemer: alloy::primitives::Address::from_hex(&order_details.source_swap.redeemer)
+            redeemer: alloy::primitives::Address::from_hex(&order_details.result.source_swap.redeemer)
                 .unwrap(),
-            timelock: alloy_primitives::Uint::from(order_details.source_swap.timelock as u64),
-            amount: order_details.source_swap.amount.parse().unwrap(),
-            secretHash: FixedBytes::from_hex(&order_details.source_swap.secret_hash).unwrap(),
+            timelock: alloy_primitives::Uint::from(order_details.result.source_swap.timelock as u64),
+            amount: order_details.result.source_swap.amount.parse().unwrap(),
+            secretHash: FixedBytes::from_hex(&order_details.result.source_swap.secret_hash).unwrap(),
         };
         info!("✅ Initiate struct created successfully");
 
@@ -586,6 +586,11 @@ impl OrderService {
 // Structure to hold order details needed for initiation
 #[derive(Debug, serde::Deserialize)]
 struct OrderDetails {
+    result: OrderResult,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct OrderResult {
     source_swap: SwapData,
     destination_swap: SwapData,
     create_order: CreateOrderData,
@@ -597,9 +602,49 @@ struct SwapData {
     timelock: i64,
     amount: String,
     secret_hash: String,
+    chain: String,
+    asset: String,
+    initiator: String,
+    filled_amount: String,
+    secret: String,
+    initiate_tx_hash: String,
+    redeem_tx_hash: String,
+    refund_tx_hash: String,
+    initiate_block_number: String,
+    redeem_block_number: String,
+    refund_block_number: String,
+    required_confirmations: i64,
+    current_confirmations: i64,
 }
 
 #[derive(Debug, serde::Deserialize)]
 struct CreateOrderData {
     create_id: String,
+    block_number: String,
+    source_chain: String,
+    destination_chain: String,
+    source_asset: String,
+    destination_asset: String,
+    initiator_source_address: String,
+    initiator_destination_address: String,
+    source_amount: String,
+    destination_amount: String,
+    fee: String,
+    nonce: String,
+    min_destination_confirmations: i64,
+    timelock: i64,
+    secret_hash: String,
+    user_id: String,
+    additional_data: AdditionalData,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct AdditionalData {
+    strategy_id: String,
+    input_token_price: f64,
+    output_token_price: f64,
+    sig: String,
+    deadline: i64,
+    tx_hash: String,
+    is_blacklisted: bool,
 }
