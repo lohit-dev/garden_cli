@@ -1,9 +1,18 @@
 use crate::models::additional_data::{AdditonalData, SignableAdditionalData};
 use crate::models::order::{ApiResponse, AttestedResponse, Order, Status};
+use crate::models::quote::{Initiate, InitiateRequest, QuoteRequest, QuoteResponse, RedeemRequest};
 use alloy::{
     hex::{FromHex, ToHexExt},
+    network::EthereumWallet,
     primitives::Bytes,
+    signers::{
+        Signer,
+        k256::ecdsa::SigningKey,
+        local::{LocalSigner, PrivateKeySigner},
+    },
+    sol_types::eip712_domain,
 };
+use alloy_primitives::FixedBytes;
 use bigdecimal::BigDecimal;
 use chrono::TimeDelta;
 use eyre::Result;
@@ -12,6 +21,7 @@ use reqwest::Client;
 use serde_json;
 use sha2::Digest;
 use tracing::{info, warn};
+use hex;
 
 #[derive(Debug, Clone)]
 pub struct OrderService {
@@ -31,11 +41,21 @@ impl OrderService {
         }
     }
 
-    // Create an order using the attested quote
-    pub async fn create_order(&self) -> Result<(String, Bytes)> {
-        let (secret, sh) = self.gen_secret();
-        let secret_hex = secret;
+    // Generate a secret and its hash for the order
+    fn gen_secret(&self) -> (String, String) {
+        use rand::{rngs::OsRng, RngCore};
 
+        let mut secret = [0u8; 32];
+        OsRng.fill_bytes(&mut secret);
+
+        let hash = sha2::Sha256::digest(&secret);
+        let hash_str = hex::encode(hash);
+        (hex::encode(secret), hash_str)
+    }
+
+    // Create an order using the attested quote
+    pub async fn create_order(&self) -> Result<(String, String)> {
+        let (secret, secret_hash) = self.gen_secret();
         info!("Creating order...");
 
         let mut order = Order {
@@ -53,7 +73,7 @@ impl OrderService {
             nonce: BigDecimal::from(1),
             min_destination_confirmations: 4,
             timelock: 7300,
-            secret_hash: sh.0.encode_hex(),
+            secret_hash: secret_hash,
             additional_data: AdditonalData {
                 deadline: chrono::Utc::now()
                     .checked_add_signed(TimeDelta::minutes(10))
@@ -85,14 +105,25 @@ impl OrderService {
 
         let res = self
             .client
-            .post(format!("{}/create-order", self.api_url))
-            .header("api-key", self.api_key.clone()) // Add .clone() here to fix the move error
+            .post("https://testnet.api.hashira.io/orders/gasless/order")
+            .header("accept", "application/json")
+            .header("Content-Type", "application/json")
             .json(&order) // Send the complete Order structure, not just the attested response
             .send()
             .await?;
 
+        let response_status = res.status();
         let response_text = res.text().await?;
+        info!("Create Order API Status: {}", response_status);
         info!("Raw Response Body: '{}'", response_text);
+
+        if !response_status.is_success() {
+            return Err(eyre::eyre!(
+                "Failed to create order: {} - {}",
+                response_status,
+                response_text
+            ));
+        }
 
         if response_text.trim().is_empty() {
             warn!("Response body is empty, cannot decode as JSON");
@@ -106,7 +137,7 @@ impl OrderService {
                 match response.status {
                     Status::Ok => {
                         if let Some(order_id) = response.data {
-                            Ok((order_id, secret_hex))
+                            Ok((order_id, secret))
                         } else {
                             Err(eyre::eyre!("No order ID in response"))
                         }
@@ -125,26 +156,62 @@ impl OrderService {
         }
     }
 
-    // Initiate an order with custom signing
-    pub async fn initiate_order(&self, order_id: &str, signature: &str) -> Result<()> {
-        // TODO: Implement API call to initiate order
-        todo!()
-    }
+    // Get quote for an order
+    pub async fn get_quote(
+        &self,
+        order_pair: &str,
+        amount: &str,
+        exact_out: bool,
+    ) -> Result<(String, f64, f64)> {
+        info!("Fetching quote from Garden Finance API...");
+        let quote_request = QuoteRequest {
+            order_pair: order_pair.to_string(),
+            amount: amount.to_string(),
+            exact_out,
+        };
 
-    // Redeem an order
-    pub async fn redeem_order(&self, order_id: &str) -> Result<()> {
-        // TODO: Implement API call to redeem order
-        todo!()
-    }
+        let url = format!(
+            "https://testnet.api.hashira.io/prices/quote?order_pair={}&amount={}&exact_out={}",
+            quote_request.order_pair, quote_request.amount, quote_request.exact_out
+        );
 
-    // Helper function to generate a secret and its hash
-    fn gen_secret(&self) -> (Bytes, (alloy::primitives::FixedBytes<32>,)) {
-        let secret = rand::thread_rng().r#gen::<[u8; 32]>(); // Using gen directly (no need for r#gen)
-        let x = sha2::Sha256::digest(secret);
-        (
-            Bytes::from(secret),
-            (alloy::primitives::FixedBytes::new(x.into()),),
-        )
+        let response = self
+            .client
+            .get(&url)
+            .header("accept", "application/json")
+            .send()
+            .await?;
+
+        let response_status = response.status();
+        let response_text = response.text().await?;
+
+        info!("Quote API Status: {}", response_status);
+
+        if !response_status.is_success() {
+            return Err(eyre::eyre!(
+                "Failed to get quote: {} - {}",
+                response_status,
+                response_text
+            ));
+        }
+
+        // Parse the response using the QuoteResponse struct
+        let quote_response: QuoteResponse = serde_json::from_str(&response_text)?;
+
+        if quote_response.status != "Ok" {
+            return Err(eyre::eyre!("Quote response status is not Ok"));
+        }
+
+        // Extract the first strategy_id and its value from the quotes map
+        if let Some((strategy_id, _)) = quote_response.result.quotes.iter().next() {
+            return Ok((
+                strategy_id.clone(),
+                quote_response.result.input_token_price,
+                quote_response.result.output_token_price,
+            ));
+        }
+
+        Err(eyre::eyre!("No quotes found in response"))
     }
 
     // Fetch attested quote from the API
@@ -175,7 +242,7 @@ impl OrderService {
 
         let response = self
             .client
-            .post("https://testnet.api.hashira.io/quote/attested")
+            .post("https://testnet.api.hashira.io/prices/quote/attested")
             .header("accept", "application/json")
             .header("Content-Type", "application/json")
             .json(&payload)
@@ -199,4 +266,147 @@ impl OrderService {
         let attestation: AttestedResponse = serde_json::from_str(&response_text)?;
         Ok(attestation)
     }
+
+    // Initiate an order with custom signing
+    pub async fn initiate_order(&self, order_id: &str, private_key: &str) -> Result<String> {
+        info!("Initiating order {}...", order_id);
+        
+        // Get order details
+        let order_details = self.get_order_details(order_id).await?;
+        
+        // Get wallet for signing
+        let (wallet, signer) = self.get_default_wallet(private_key.to_string())?;
+        
+        // Create the Initiate struct according to the sol! macro definition
+        let initiate = Initiate {
+            redeemer: alloy::primitives::Address::from_hex(&order_details.redeemer).unwrap(),
+            timelock: alloy_primitives::Uint::from(order_details.timelock),
+            amount: order_details.amount.parse().unwrap(),
+            secretHash: FixedBytes::from_hex(&order_details.secret_hash).unwrap(),
+        };
+        
+        // Create domain for EIP-712 signing
+        let domain = eip712_domain! {
+            name: "Garden Finance",
+            version: "1",
+            chain_id: 421614u64,
+            verifying_contract: alloy::primitives::Address::from_hex("0x795Dcb58d1cd4789169D5F938Ea05E17ecEB68cA").unwrap(),
+        };
+        
+        // Sign the initiate data
+        let signature = signer.sign_typed_data(&initiate, &domain).await?;
+        
+        // Create initiate request
+        let initiate_request = InitiateRequest {
+            order_id: order_id.to_string(),
+            signature: signature.to_string(),
+            perform_on: "Source".to_string(),
+        };
+        
+        // Send initiate request
+        let response = self
+            .client
+            .post(format!("{}/initiate", self.api_url))
+            .header("api-key", &self.api_key)
+            .json(&initiate_request)
+            .send()
+            .await?;
+            
+        let response_status = response.status();
+        let response_text = response.text().await?;
+        
+        if !response_status.is_success() {
+            return Err(eyre::eyre!(
+                "Failed to initiate order: {} - {}",
+                response_status,
+                response_text
+            ));
+        }
+        
+        let response: ApiResponse<String> = serde_json::from_str(&response_text)?;
+        match response.status {
+            Status::Ok => {
+                if let Some(tx_hash) = response.data {
+                    Ok(tx_hash)
+                } else {
+                    Err(eyre::eyre!("No transaction hash in response"))
+                }
+            }
+            Status::Error => Err(eyre::eyre!(
+                "API error: {}",
+                response.error.unwrap_or_default()
+            )),
+        }
+    }
+    
+    // Get order details for initiation
+    async fn get_order_details(&self, order_id: &str) -> Result<OrderDetails> {
+        let url = format!("https://testnet.api.hashira.io/orders/orders/id/matched/{}", order_id);
+        
+        let response = self
+            .client
+            .get(&url)
+            .header("accept", "application/json")
+            .send()
+            .await?;
+            
+        let status = response.status();
+        let text = response.text().await?;
+        
+        if !status.is_success() {
+            return Err(eyre::eyre!("Failed to get order details: {} - {}", status, text));
+        }
+        
+        // Parse the order details from the response
+        // This is a simplified version - you'll need to adjust based on the actual API response
+        let order_details: OrderDetails = serde_json::from_str(&text)?;
+        
+        Ok(order_details)
+    }
+    
+    // Helper function to create a wallet from a private key
+    fn get_default_wallet(&self, private_key: String) -> Result<(EthereumWallet, LocalSigner<SigningKey>)> {
+        let signer = PrivateKeySigner::from_bytes(
+            &FixedBytes::from_hex(private_key).expect("Invalid private key"),
+        )?;
+        Ok((EthereumWallet::from(signer.clone()), signer))
+    }
+    
+    // Redeem an order
+    pub async fn redeem_order(&self, order_id: &str, secret: &str) -> Result<String> {
+        info!("Redeeming order {}...", order_id);
+        
+        let redeem_request = RedeemRequest {
+            order_id: order_id.to_string(),
+            secret: secret.to_string(),
+            perform_on: "Destination".to_string(),
+        };
+        
+        let response = self
+            .client
+            .post("https://testnet.api.hashira.io/orders/gasless/redeem")
+            .header("accept", "application/json")
+            .header("Content-Type", "application/json")
+            .json(&redeem_request)
+            .send()
+            .await?;
+            
+        let status = response.status();
+        let text = response.text().await?;
+        
+        if !status.is_success() {
+            return Err(eyre::eyre!("Failed to redeem order: {} - {}", status, text));
+        }
+        
+        Ok(text)
+    }
+}
+
+// Structure to hold order details needed for initiation
+#[derive(Debug, serde::Deserialize)]
+struct OrderDetails {
+    redeemer: String,
+    timelock: u64,
+    amount: String,
+    secret_hash: String,
 }

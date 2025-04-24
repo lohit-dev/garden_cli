@@ -1,5 +1,6 @@
 use crate::models::additional_data::SignableAdditionalData;
 use crate::models::order::{ApiResponse, AttestedResponse, Order, Status};
+use crate::models::quote::{QuoteRequest, QuoteResponse};
 use eyre::Result;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -23,44 +24,59 @@ impl QuoteService {
         }
     }
 
-    // Fetch price quote from the API
+    // Fetch price quote from the API - matches reference.rs get_quote
     pub async fn fetch_price_quote(
         &self,
         order_pair: &str,
         amount: &str,
         exact_out: bool,
-    ) -> Result<String> {
-        let url = format!("{}/quote", self.api_url);
+    ) -> Result<(String, f64, f64)> {
+        info!("Fetching quote from Garden Finance API...");
+        let url = format!(
+            "https://testnet.api.hashira.io/quote?order_pair={}&amount={}&exact_out={}",
+            order_pair, amount, exact_out
+        );
 
         let response = self
             .client
-            .post(&url)
-            .header("api-key", &self.api_key)
-            .json(&json!({
-                "order_pair": order_pair,
-                "amount": amount,
-                "exact_out": exact_out
-            }))
+            .get(&url)
+            .header("accept", "application/json")
             .send()
             .await?;
 
-        let quote_response: ApiResponse<serde_json::Value> = response.json().await?;
+        let response_status = response.status();
+        let response_text = response.text().await?;
 
-        match quote_response.status {
-            crate::models::order::Status::Ok => {
-                let quote_data = serde_json::to_string(&quote_response.data.unwrap())?;
-                Ok(quote_data)
-            }
-            crate::models::order::Status::Error => Err(eyre::eyre!(
-                "Error fetching price quote: {}",
-                quote_response
-                    .error
-                    .unwrap_or_else(|| "Unknown error".to_string())
-            )),
+        info!("Quote API Status: {}", response_status);
+
+        if !response_status.is_success() {
+            return Err(eyre::eyre!(
+                "Failed to get quote: {} - {}",
+                response_status,
+                response_text
+            ));
         }
+
+        // Parse the response using the QuoteResponse struct
+        let quote_response: QuoteResponse = serde_json::from_str(&response_text)?;
+
+        if quote_response.status != "Ok" {
+            return Err(eyre::eyre!("Quote response status is not Ok"));
+        }
+
+        // Extract the first strategy_id and its value from the quotes map
+        if let Some((strategy_id, _)) = quote_response.result.quotes.iter().next() {
+            return Ok((
+                strategy_id.clone(),
+                quote_response.result.input_token_price,
+                quote_response.result.output_token_price,
+            ));
+        }
+
+        Err(eyre::eyre!("No quotes found in response"))
     }
 
-    // Fetch attested quote from the API
+    // Fetch attested quote from the API - matches reference.rs get_attested_quote
     pub async fn fetch_attested_quote(
         &self,
         order_params: &Order<SignableAdditionalData>,
