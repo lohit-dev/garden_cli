@@ -355,19 +355,24 @@ impl OrderService {
         // Create the Initiate struct
         info!("📦 Creating initiate struct for order {}", order_id);
         let initiate = Initiate {
-            redeemer: alloy::primitives::Address::from_hex(&order_details.result.source_swap.redeemer)
-                .unwrap(),
-            timelock: alloy_primitives::Uint::from(order_details.result.source_swap.timelock as u64),
+            redeemer: alloy::primitives::Address::from_hex(
+                &order_details.result.source_swap.redeemer,
+            )
+            .unwrap(),
+            timelock: alloy_primitives::Uint::from(
+                order_details.result.source_swap.timelock as u64,
+            ),
             amount: order_details.result.source_swap.amount.parse().unwrap(),
-            secretHash: FixedBytes::from_hex(&order_details.result.source_swap.secret_hash).unwrap(),
+            secretHash: FixedBytes::from_hex(&order_details.result.source_swap.secret_hash)
+                .unwrap(),
         };
         info!("✅ Initiate struct created successfully");
 
         // Create domain for EIP-712 signing
         info!("📝 Creating EIP-712 domain for signing");
         let domain = eip712_domain! {
-            name: "Garden Finance",
-            version: "1",
+            name: "HTLC".to_string(),
+            version: "1".to_string(),
             chain_id: 421614u64,
             verifying_contract: alloy::primitives::Address::from_hex("0x795Dcb58d1cd4789169D5F938Ea05E17ecEB68cA").unwrap(),
         };
