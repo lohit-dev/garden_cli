@@ -51,3 +51,10 @@ pub struct InitiateRequest {
     /// Which chain to perform the swap on
     pub perform_on: String,
 }
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct StarkInitiateRequst {
+    pub order_id: String,
+    pub signature: Vec<String>,
+    pub perform_on: String,
+}

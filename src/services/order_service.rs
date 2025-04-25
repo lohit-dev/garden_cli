@@ -2,8 +2,10 @@ use std::str::FromStr;
 
 use crate::models::additional_data::{AdditonalData, SignableAdditionalData};
 use crate::models::order::{ApiResponse, AttestedResponse, Order, Status};
-use crate::models::quote::{Initiate, InitiateRequest, QuoteRequest, QuoteResponse, RedeemRequest};
-use crate::services::starknet_services::get_signer_and_account;
+use crate::models::quote::{
+    Initiate, InitiateRequest, QuoteRequest, QuoteResponse, RedeemRequest, StarkInitiateRequst,
+};
+use crate::services::starknet_services::{get_intiate_signature, get_signer_and_account};
 use crate::utils::file_utils::{self};
 use alloy::{
     hex::FromHex,
@@ -511,90 +513,95 @@ impl OrderService {
         info!("🔑 Creating wallet from private key");
 
         // Different signing process based on source chain
-        let signature_str = if is_starknet_source {
-            // Use starknet signing
-            info!("🔐 Using Starknet signing method");
-            let (signer, account) = get_signer_and_account(
-                Felt::from_hex(private_key).unwrap(),
-                felt!("0x056b3ebec13503cb1e1d9691f13fdc9b4ae7015765113345a7355add1e29d7dc"),
-            )
-            .await;
+        // let signature_str =
+        // if is_starknet_source {
+        // Use starknet signing
+        info!("🔐 Using Starknet signing method");
+        let (signer, account) = get_signer_and_account(
+            Felt::from_hex(private_key).unwrap(),
+            felt!("0x056b3ebec13503cb1e1d9691f13fdc9b4ae7015765113345a7355add1e29d7dc"),
+        )
+        .await;
 
-            info!("✅ Starknet wallet created successfully");
+        info!("✅ Starknet wallet created successfully");
 
-            // Get the redeemer, amount, timelock, and secret_hash from order details
-            let redeemer = &order_details.result.source_swap.redeemer;
-            let amount = &order_details.result.source_swap.amount;
-            let timelock = order_details.result.source_swap.timelock as u128;
-            let secret_hash = &order_details.result.source_swap.secret_hash;
+        // Get the redeemer, amount, timelock, and secret_hash from order details
+        let redeemer = &order_details.result.source_swap.redeemer;
+        let amount = order_details
+            .result
+            .source_swap
+            .amount
+            .parse::<BigDecimal>()
+            .expect("Failed to parse amount");
+        let timelock = order_details.result.source_swap.timelock as u128;
+        let secret_hash = &order_details.result.source_swap.secret_hash;
 
-            info!("📦 Preparing Starknet signature parameters");
-            info!("  🔹 Redeemer: {}", redeemer);
-            info!("  🔹 Amount: {}", amount);
-            info!("  🔹 Timelock: {}", timelock);
-            info!("  🔹 Secret Hash: {}", secret_hash);
+        info!("📦 Preparing Starknet signature parameters");
+        info!("  🔹 Redeemer: {}", redeemer);
+        info!("  🔹 Amount: {}", amount);
+        info!("  🔹 Timelock: {}", timelock);
+        info!("  🔹 Secret Hash: {}", secret_hash);
 
-            // Call the starknet signature function
-            info!("✍️ Signing with Starknet for order {}", order_id);
-            let signature = crate::services::starknet_services::get_starknet_signature(
-                signer,
-                account,
-                redeemer,
-                amount,
-                timelock,
-                secret_hash,
-                &order_pair,
-            )
-            .await?
-            .to_string();
+        // Call the starknet signature function
+        info!("✍️ Signing with Starknet for order {}", order_id);
+        let signature = get_intiate_signature(
+            signer,
+            account,
+            amount,
+            redeemer.to_string(),
+            secret_hash.to_string(),
+            timelock.to_string(),
+        )
+        .await
+        .unwrap();
 
-            info!("✅ Successfully signed with Starknet");
-            signature
-        } else {
-            // Use EVM signing (original implementation)
-            info!("🔐 Using EVM signing method");
-            let (wallet, signer) = self.get_default_wallet(private_key.to_string())?;
-            info!("✅ EVM wallet created successfully");
+        info!("✅ Successfully signed with Starknet");
 
-            // Create the Initiate struct
-            info!("📦 Creating initiate struct for order {}", order_id);
-            let initiate = Initiate {
-                redeemer: alloy::primitives::Address::from_hex(
-                    &order_details.result.source_swap.redeemer,
-                )
-                .unwrap(),
-                timelock: alloy_primitives::Uint::from(
-                    order_details.result.source_swap.timelock as u64,
-                ),
-                amount: order_details.result.source_swap.amount.parse().unwrap(),
-                secretHash: FixedBytes::from_hex(&order_details.result.source_swap.secret_hash)
-                    .unwrap(),
-            };
-            info!("✅ Initiate struct created successfully");
+        // } else {
+        //     // Use EVM signing (original implementation)
+        //     info!("🔐 Using EVM signing method");
+        //     let (wallet, signer) = self.get_default_wallet(private_key.to_string())?;
+        //     info!("✅ EVM wallet created successfully");
 
-            // Create domain for EIP-712 signing
-            info!("📝 Creating EIP-712 domain for signing");
-            let domain = eip712_domain! {
-                name: "HTLC".to_string(),
-                version: "1".to_string(),
-                chain_id: 421614u64,
-                verifying_contract: alloy::primitives::Address::from_hex("0x795Dcb58d1cd4789169D5F938Ea05E17ecEB68cA").unwrap(),
-            };
-            info!("✅ EIP-712 domain created successfully");
+        //     // Create the Initiate struct
+        //     info!("📦 Creating initiate struct for order {}", order_id);
+        //     let initiate = Initiate {
+        //         redeemer: alloy::primitives::Address::from_hex(
+        //             &order_details.result.source_swap.redeemer,
+        //         )
+        //         .unwrap(),
+        //         timelock: alloy_primitives::Uint::from(
+        //             order_details.result.source_swap.timelock as u64,
+        //         ),
+        //         amount: order_details.result.source_swap.amount.parse().unwrap(),
+        //         secretHash: FixedBytes::from_hex(&order_details.result.source_swap.secret_hash)
+        //             .unwrap(),
+        //     };
+        //     info!("✅ Initiate struct created successfully");
 
-            // Sign the initiate data
-            info!("✍️ Signing initiate data for order {}", order_id);
-            let signature = signer.sign_typed_data(&initiate, &domain).await?;
-            info!("✅ Successfully signed initiate data");
+        //     // Create domain for EIP-712 signing
+        //     info!("📝 Creating EIP-712 domain for signing");
+        //     let domain = eip712_domain! {
+        //         name: "HTLC".to_string(),
+        //         version: "1".to_string(),
+        //         chain_id: 421614u64,
+        //         verifying_contract: alloy::primitives::Address::from_hex("0x795Dcb58d1cd4789169D5F938Ea05E17ecEB68cA").unwrap(),
+        //     };
+        //     info!("✅ EIP-712 domain created successfully");
 
-            signature.to_string()
-        };
+        //     // Sign the initiate data
+        //     info!("✍️ Signing initiate data for order {}", order_id);
+        //     let signature = signer.sign_typed_data(&initiate, &domain).await?;
+        //     info!("✅ Successfully signed initiate data");
+
+        //     signature.to_string()
+        // };
 
         // Create initiate request
         info!("📦 Creating initiate request for order {}", order_id);
-        let initiate_request = InitiateRequest {
+        let initiate_request = StarkInitiateRequst {
             order_id: order_id.to_string(),
-            signature: signature_str,
+            signature: vec![signature.r.to_string(), signature.s.to_string()],
             perform_on: "Source".to_string(),
         };
         info!("✅ Initiate request created successfully");
@@ -605,9 +612,18 @@ impl OrderService {
         // Use retry with backoff for the API call
         self.retry_with_backoff(
             || async {
+                // Use different URL for Starknet source chains
+                let url = if is_starknet_source {
+                    "https://starknet-relayer.hashira.io/initiate".to_string()
+                } else {
+                    format!("{}/initiate", self.api_url)
+                };
+
+                info!("🔗 Using initiate URL: {}", url);
+
                 let response = self
                     .client
-                    .post(format!("{}/initiate", self.api_url))
+                    .post(url)
                     .header("api-key", &self.api_key)
                     .json(&initiate_request)
                     .send()
@@ -716,8 +732,23 @@ impl OrderService {
     // Redeem an order
     pub async fn redeem_order(&self, order_id: &str, secret: &str) -> Result<String> {
         info!("🎁 Redeeming order {}...", order_id);
-        info!("📦 Creating redeem request for order {}", order_id);
 
+        // Get order details to determine destination chain
+        info!("📝 Getting order details for order {}", order_id);
+        let order_details = self.get_order_details(order_id).await?;
+
+        // Check if the destination chain is starknet
+        let is_starknet_destination = order_details
+            .result
+            .create_order
+            .destination_chain
+            .starts_with("starknet");
+        info!(
+            "🔍 Destination chain: {}, is starknet: {}",
+            order_details.result.create_order.destination_chain, is_starknet_destination
+        );
+
+        info!("📦 Creating redeem request for order {}", order_id);
         let redeem_request = RedeemRequest {
             order_id: order_id.to_string(),
             secret: secret.to_string(),
@@ -725,10 +756,18 @@ impl OrderService {
         };
         info!("✅ Redeem request created successfully");
 
+        // Use different URL based on destination chain
+        let url = if is_starknet_destination {
+            "https://starknet-relayer.hashira.io/redeem"
+        } else {
+            "https://evm-relay-stage.hashira.io/redeem"
+        };
+        info!("🔗 Using redeem URL: {}", url);
+
         info!("📤 Sending redeem request for order {}", order_id);
         let response = self
             .client
-            .post("https://starknet-relayer.hashira.io/redeem")
+            .post(url)
             .header("accept", "application/json")
             .header("Content-Type", "application/json")
             .header("api-key", &self.api_key)
@@ -782,7 +821,7 @@ impl OrderService {
         secret: &str,
         max_attempts: usize,
     ) -> Result<String> {
-        let max_attempts = if max_attempts == 0 { 5 } else { max_attempts }; // Default to 5 attempts if not specified
+        let max_attempts = if max_attempts == 0 { 10 } else { max_attempts }; // Default to 5 attempts if not specified
 
         for attempt in 1..=max_attempts {
             info!(
