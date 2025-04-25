@@ -1,10 +1,8 @@
 use crate::models::additional_data::SignableAdditionalData;
-use crate::models::order::{ApiResponse, AttestedResponse, Order, Status};
-use crate::models::quote::{QuoteRequest, QuoteResponse};
+use crate::models::order::{AttestedResponse, Order};
+use crate::models::quote::QuoteResponse;
 use eyre::Result;
 use reqwest::Client;
-use serde::{Deserialize, Serialize};
-use serde_json::json;
 use tracing::info;
 
 pub struct QuoteService {
@@ -77,7 +75,6 @@ impl QuoteService {
         Err(eyre::eyre!("No quotes found in response"))
     }
 
-    // Fetch attested quote from the API - matches reference.rs get_attested_quote
     pub async fn fetch_attested_quote(
         &self,
         order_params: &Order<SignableAdditionalData>,

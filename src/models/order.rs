@@ -1,5 +1,4 @@
 use crate::models::additional_data::{AdditonalData, SignableAdditionalData};
-use alloy::primitives::{Address, FixedBytes, Uint};
 use alloy::sol;
 use bigdecimal::BigDecimal;
 use serde::{Deserialize, Serialize};

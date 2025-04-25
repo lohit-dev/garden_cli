@@ -1,11 +1,10 @@
 use crate::models::additional_data::{AdditonalData, SignableAdditionalData};
 use crate::models::order::{ApiResponse, AttestedResponse, Order, Status};
 use crate::models::quote::{Initiate, InitiateRequest, QuoteRequest, QuoteResponse, RedeemRequest};
-use crate::utils::file_utils::{self, OrderData};
+use crate::utils::file_utils::{self};
 use alloy::{
-    hex::{FromHex, ToHexExt},
+    hex::FromHex,
     network::EthereumWallet,
-    primitives::Bytes,
     signers::{
         Signer,
         k256::ecdsa::SigningKey,
@@ -18,11 +17,9 @@ use bigdecimal::BigDecimal;
 use chrono::TimeDelta;
 use eyre::Result;
 use hex;
-use rand::Rng;
 use reqwest::Client;
 use serde_json;
 use sha2::Digest;
-use std::collections::HashMap;
 use tracing::{info, warn};
 
 #[derive(Debug, Clone)]
@@ -162,6 +159,10 @@ impl OrderService {
                         if let Some(order_id) = response.data {
                             info!("💾 Saving order data to file...");
                             file_utils::save_order_data(&order_id, &secret)?;
+                            let mut order_ids =
+                                file_utils::load_order_ids().unwrap_or_else(|_| Vec::new());
+                            order_ids.push(order_id.clone());
+                            file_utils::save_order_ids(&order_ids)?;
                             info!(
                                 "✅ Successfully saved order data: order_id={}, secret={}",
                                 order_id, secret
