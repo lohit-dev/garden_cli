@@ -13,6 +13,8 @@ dialoguer = "0.11.0"
 console = "0.15.11"
 hex = "0.4.3"
 thiserror = "2.0.12"
+starknet={version = "0.14.0"}
+starknet-crypto={version = "0.7.4"}
 anyhow = "1.0.98"
 
 # Evm Relay Dependencies

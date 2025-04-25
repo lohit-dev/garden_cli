@@ -149,7 +149,7 @@ pub async fn run() -> Result<()> {
         .get_quote(&quote.order_pair, &quote.amount, quote.exact_out)
         .await
     {
-        Ok((strategy_id, input_price, output_price)) => {
+        Ok((strategy_id, input_price, output_price, destination_amount)) => {
             println!(
                 "{}",
                 style(format!(
@@ -167,15 +167,28 @@ pub async fn run() -> Result<()> {
                 .green()
             );
 
+            println!(
+                "{}",
+                style(format!("💰 Destination amount: {}", destination_amount)).green()
+            );
+
             // Create orders based on the quote
             let mut tasks = FuturesUnordered::new();
             let strategy_id = strategy_id.clone(); // Clone before the loop
+
+            // Clone order_pair, amount, and destination_amount outside the loop
+            let order_pair = quote.order_pair.clone();
+            let amount = quote.amount.clone();
+            let destination_amount = destination_amount.clone();
 
             // Process each client (coroutine)
             for client_id in 0..num_clients {
                 let order_service_clone = order_service.clone();
                 let semaphore_clone = semaphore.clone();
                 let strategy_id = strategy_id.clone(); // Clone for each client
+                let order_pair = order_pair.clone();
+                let amount = amount.clone();
+                let destination_amount = destination_amount.clone(); // Clone for each client
 
                 tasks.push(tokio::spawn(async move {
                     let mut results = Vec::new();
@@ -191,7 +204,15 @@ pub async fn run() -> Result<()> {
                     for order_num in 0..orders_per_client {
                         let permit = semaphore_clone.clone().acquire_owned().await.unwrap();
                         match order_service_clone
-                            .create_order(strategy_id.clone(), input_price, output_price)
+                            .create_order(
+                                strategy_id.clone(),
+                                input_price,
+                                output_price,
+                                &order_pair,
+                                &amount,
+                                quote.exact_out,
+                                destination_amount.clone(),
+                            )
                             .await
                         {
                             Ok((order_id, secret)) => {
@@ -206,7 +227,7 @@ pub async fn run() -> Result<()> {
                                     ))
                                     .green()
                                 );
-                                results.push(Ok((order_id, secret.encode_hex())));
+                                results.push(Ok((order_id, secret)));
                             }
                             Err(e) => {
                                 println!(
@@ -357,8 +378,9 @@ pub async fn run() -> Result<()> {
             let permit = semaphore.clone().acquire_owned().await.unwrap();
 
             tasks.push(tokio::spawn(async move {
+                // Use retry_redeem_order with 5 retry attempts instead of direct redeem_order
                 let result = order_service_clone
-                    .redeem_order(&order_id_clone, &secret_clone)
+                    .retry_redeem_order(&order_id_clone, &secret_clone, 5)
                     .await;
                 drop(permit);
                 (order_id_clone, result)

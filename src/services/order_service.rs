@@ -1,6 +1,9 @@
+use std::str::FromStr;
+
 use crate::models::additional_data::{AdditonalData, SignableAdditionalData};
 use crate::models::order::{ApiResponse, AttestedResponse, Order, Status};
 use crate::models::quote::{Initiate, InitiateRequest, QuoteRequest, QuoteResponse, RedeemRequest};
+use crate::services::starknet_services::get_signer_and_account;
 use crate::utils::file_utils::{self};
 use alloy::{
     hex::FromHex,
@@ -20,6 +23,8 @@ use hex;
 use reqwest::Client;
 use serde_json;
 use sha2::Digest;
+use starknet::macros::felt;
+use starknet_crypto::Felt;
 use tracing::{info, warn};
 
 #[derive(Debug, Clone)]
@@ -58,25 +63,93 @@ impl OrderService {
         strategy_id: String,
         input_token_price: f64,
         output_token_price: f64,
+        order_pair: &str,
+        amount: &str,
+        exact_out: bool,
+        destination_amount: String,
     ) -> Result<(String, String)> {
         info!("🎯 Creating new order with strategy ID: {}", strategy_id);
         let (secret, secret_hash) = self.gen_secret();
         info!("🔑 Generated secret and hash for order");
 
+        // Parse the order pair to extract chain and asset information
+        info!("🔍 Parsing order pair: {}", order_pair);
+        let parts: Vec<&str> = order_pair.split("::").collect();
+        if parts.len() != 2 {
+            return Err(eyre::eyre!("Invalid order pair format: {}", order_pair));
+        }
+
+        let (src, dst) = (parts[0], parts[1]);
+        let src_parts: Vec<&str> = src.split(':').collect();
+        let dst_parts: Vec<&str> = dst.split(':').collect();
+
+        if src_parts.len() != 2 || dst_parts.len() != 2 {
+            return Err(eyre::eyre!(
+                "Invalid chain:asset format in order pair: {}",
+                order_pair
+            ));
+        }
+
+        let source_chain = src_parts[0];
+        let source_asset = src_parts[1];
+        let destination_chain = dst_parts[0];
+        let destination_asset = dst_parts[1];
+
+        info!("📊 Parsed order details:");
+        info!("  🔹 Source chain: {}", source_chain);
+        info!("  🔹 Source asset: {}", source_asset);
+        info!("  🔹 Destination chain: {}", destination_chain);
+        info!("  🔹 Destination asset: {}", destination_asset);
+
+        // Set the correct initiator addresses based on source chain
+        let (initiator_source_address, initiator_destination_address) = if source_chain
+            .starts_with("starknet")
+        {
+            // If source is Starknet, use Starknet address as source and EVM address as destination
+            (
+                "0x056b3ebec13503cb1e1d9691f13fdc9b4ae7015765113345a7355add1e29d7dc".to_string(),
+                "0x3E53d785995bb74C0B9ba8F71D0d6a0c4d9E6901".to_string(),
+            )
+        } else {
+            // Otherwise (e.g., for Arbitrum), use EVM address as source and Starknet address as destination
+            (
+                "0x3E53d785995bb74C0B9ba8F71D0d6a0c4d9E6901".to_string(),
+                "0x056b3ebec13503cb1e1d9691f13fdc9b4ae7015765113345a7355add1e29d7dc".to_string(),
+            )
+        };
+
+        info!("👤 Using initiator addresses:");
+        info!("  🔹 Source: {}", initiator_source_address);
+        info!("  🔹 Destination: {}", initiator_destination_address);
+
+        // Log all key parameters before parsing amount
+        info!("[ORDER PARAMS] amount: {}", amount);
+        info!("[ORDER PARAMS] order_pair: {}", order_pair);
+        info!("[ORDER PARAMS] strategy_id: {}", strategy_id);
+        info!("[ORDER PARAMS] input_token_price: {}", input_token_price);
+        info!("[ORDER PARAMS] output_token_price: {}", output_token_price);
+        info!("[ORDER PARAMS] exact_out: {}", exact_out);
+        // Parse the amount as a BigDecimal
+        let source_amount = match BigDecimal::from_str(amount) {
+            Ok(amount) => amount,
+            Err(_) => return Err(eyre::eyre!("Failed to parse amount: {}", amount)),
+        };
+
         info!("📦 Building order parameters...");
         let mut order = Order {
-            source_chain: "arbitrum_sepolia".to_string(),
-            destination_chain: "starknet_sepolia".to_string(),
-            source_asset: "0x795Dcb58d1cd4789169D5F938Ea05E17ecEB68cA".to_string(),
-            destination_asset: "0x75cf614ce4ebce29ac622a50cd5151ddfff853159707589a85dd67b9fb1eba"
-                .to_string(),
-            initiator_source_address: "0x3E53d785995bb74C0B9ba8F71D0d6a0c4d9E6901".to_string(),
-            initiator_destination_address:
-                "0x056b3ebec13503cb1e1d9691f13fdc9b4ae7015765113345a7355add1e29d7dc".to_string(),
-            source_amount: BigDecimal::from(10000),
-            destination_amount: BigDecimal::from(5194207362831030i64),
+            source_chain: source_chain.to_string(),
+            destination_chain: destination_chain.to_string(),
+            source_asset: source_asset.to_string(),
+            destination_asset: destination_asset.to_string(),
+            initiator_source_address,
+            initiator_destination_address,
+            source_amount,
+            // Set the destination amount from the quote response
+            destination_amount: BigDecimal::from_str(&destination_amount)
+                .unwrap_or(BigDecimal::from(0)),
             fee: BigDecimal::from(1),
-            nonce: BigDecimal::from(1),
+            nonce: BigDecimal::from_str(&chrono::Utc::now().timestamp_millis().to_string())
+                .unwrap(),
             min_destination_confirmations: 2,
             timelock: 7300,
             secret_hash: secret_hash,
@@ -101,9 +174,12 @@ impl OrderService {
         let signable_order = order.signable_order();
         info!("✅ Signable order created");
 
+        // Log the destination amount being used
+        info!("💰 Using destination amount: {}", order.destination_amount);
+
         info!("🔍 Getting attested quote...");
-        let attested = self.fetch_attested_quote(&signable_order).await?;
-        info!("✅ Received attested quote");
+        let attested = self.fetch_attested_quote(&order).await?;
+        info!("✅ Received attested quote :{:#?}", attested);
 
         info!("📝 Updating order with attested data...");
         order.additional_data.sig = Some(attested.result.additional_data.sig);
@@ -197,7 +273,7 @@ impl OrderService {
         order_pair: &str,
         amount: &str,
         exact_out: bool,
-    ) -> Result<(String, f64, f64)> {
+    ) -> Result<(String, f64, f64, String)> {
         info!("💱 Fetching quote for order pair: {}", order_pair);
         info!("📊 Amount: {}, Exact Out: {}", amount, exact_out);
 
@@ -259,10 +335,20 @@ impl OrderService {
                 "  💰 Output token price: {}",
                 quote_response.result.output_token_price
             );
+            // Get the destination amount for this strategy
+            let destination_amount = quote_response
+                .result
+                .quotes
+                .get(strategy_id)
+                .ok_or_else(|| eyre::eyre!("Strategy ID not found in quotes"))?;
+
+            info!("  💰 Destination amount: {}", destination_amount);
+
             return Ok((
                 strategy_id.clone(),
                 quote_response.result.input_token_price,
                 quote_response.result.output_token_price,
+                destination_amount.clone(),
             ));
         }
 
@@ -273,10 +359,22 @@ impl OrderService {
     // Fetch attested quote from the API
     pub async fn fetch_attested_quote(
         &self,
-        order_params: &Order<SignableAdditionalData>,
+        order_params: &Order<AdditonalData>,
     ) -> Result<AttestedResponse> {
         info!("🔍 Getting attested quote for order...");
         info!("📝 Building attestation payload...");
+
+        info!("HERE ARE THE PARAMS");
+        info!("order_params:{:#?}", order_params);
+        info!(
+            "Source Amount: {:#?}",
+            order_params.source_amount.to_string()
+        );
+        info!(
+            "Destination Amount: {:#?}",
+            order_params.destination_amount.to_string()
+        );
+
         let payload = serde_json::json!({
             "source_chain": order_params.source_chain,
             "destination_chain": order_params.destination_chain,
@@ -337,6 +435,46 @@ impl OrderService {
     }
 
     // Initiate an order with custom signing
+    // Helper function to retry an async operation with exponential backoff
+    async fn retry_with_backoff<F, Fut, T>(
+        &self,
+        operation: F,
+        max_retries: usize,
+        order_id: &str,
+    ) -> Result<T>
+    where
+        F: Fn() -> Fut,
+        Fut: std::future::Future<Output = Result<T>>,
+    {
+        let mut retries = 0;
+        let mut delay = 1; // Start with 1 second delay
+
+        loop {
+            match operation().await {
+                Ok(result) => return Ok(result),
+                Err(e) => {
+                    if retries >= max_retries {
+                        warn!(
+                            "❌ Max retries ({}) reached for order {}: {}",
+                            max_retries, order_id, e
+                        );
+                        return Err(e);
+                    }
+
+                    retries += 1;
+                    warn!(
+                        "⚠️ Attempt {} failed for order {}: {}. Retrying in {} seconds...",
+                        retries, order_id, e, delay
+                    );
+
+                    // Sleep with exponential backoff
+                    tokio::time::sleep(std::time::Duration::from_secs(delay)).await;
+                    delay += 2;
+                }
+            }
+        }
+    }
+
     pub async fn initiate_order(&self, order_id: &str, private_key: &str) -> Result<String> {
         info!("🚀 Initiating order {}...", order_id);
         info!("📝 Getting order details for order {}", order_id);
@@ -348,100 +486,177 @@ impl OrderService {
             order_id
         );
 
+        // Check if the source chain is starknet
+        let is_starknet_source = order_details
+            .result
+            .create_order
+            .source_chain
+            .starts_with("starknet");
+        info!(
+            "🔍 Source chain: {}, is starknet: {}",
+            order_details.result.create_order.source_chain, is_starknet_source
+        );
+
+        // Construct the order pair for signature generation
+        let order_pair = format!(
+            "{}:{}::{}:{}",
+            order_details.result.create_order.source_chain,
+            order_details.result.create_order.source_asset,
+            order_details.result.create_order.destination_chain,
+            order_details.result.create_order.destination_asset
+        );
+        info!("🔗 Order pair: {}", order_pair);
+
         // Get wallet for signing
         info!("🔑 Creating wallet from private key");
-        let (wallet, signer) = self.get_default_wallet(private_key.to_string())?;
-        info!("✅ Wallet created successfully");
 
-        // Create the Initiate struct
-        info!("📦 Creating initiate struct for order {}", order_id);
-        let initiate = Initiate {
-            redeemer: alloy::primitives::Address::from_hex(
-                &order_details.result.source_swap.redeemer,
+        // Different signing process based on source chain
+        let signature_str = if is_starknet_source {
+            // Use starknet signing
+            info!("🔐 Using Starknet signing method");
+            let (signer, account) = get_signer_and_account(
+                Felt::from_hex(private_key).unwrap(),
+                felt!("0x056b3ebec13503cb1e1d9691f13fdc9b4ae7015765113345a7355add1e29d7dc"),
             )
-            .unwrap(),
-            timelock: alloy_primitives::Uint::from(
-                order_details.result.source_swap.timelock as u64,
-            ),
-            amount: order_details.result.source_swap.amount.parse().unwrap(),
-            secretHash: FixedBytes::from_hex(&order_details.result.source_swap.secret_hash)
+            .await;
+
+            info!("✅ Starknet wallet created successfully");
+
+            // Get the redeemer, amount, timelock, and secret_hash from order details
+            let redeemer = &order_details.result.source_swap.redeemer;
+            let amount = &order_details.result.source_swap.amount;
+            let timelock = order_details.result.source_swap.timelock as u128;
+            let secret_hash = &order_details.result.source_swap.secret_hash;
+
+            info!("📦 Preparing Starknet signature parameters");
+            info!("  🔹 Redeemer: {}", redeemer);
+            info!("  🔹 Amount: {}", amount);
+            info!("  🔹 Timelock: {}", timelock);
+            info!("  🔹 Secret Hash: {}", secret_hash);
+
+            // Call the starknet signature function
+            info!("✍️ Signing with Starknet for order {}", order_id);
+            let signature = crate::services::starknet_services::get_starknet_signature(
+                signer,
+                account,
+                redeemer,
+                amount,
+                timelock,
+                secret_hash,
+                &order_pair,
+            )
+            .await?
+            .to_string();
+
+            info!("✅ Successfully signed with Starknet");
+            signature
+        } else {
+            // Use EVM signing (original implementation)
+            info!("🔐 Using EVM signing method");
+            let (wallet, signer) = self.get_default_wallet(private_key.to_string())?;
+            info!("✅ EVM wallet created successfully");
+
+            // Create the Initiate struct
+            info!("📦 Creating initiate struct for order {}", order_id);
+            let initiate = Initiate {
+                redeemer: alloy::primitives::Address::from_hex(
+                    &order_details.result.source_swap.redeemer,
+                )
                 .unwrap(),
-        };
-        info!("✅ Initiate struct created successfully");
+                timelock: alloy_primitives::Uint::from(
+                    order_details.result.source_swap.timelock as u64,
+                ),
+                amount: order_details.result.source_swap.amount.parse().unwrap(),
+                secretHash: FixedBytes::from_hex(&order_details.result.source_swap.secret_hash)
+                    .unwrap(),
+            };
+            info!("✅ Initiate struct created successfully");
 
-        // Create domain for EIP-712 signing
-        info!("📝 Creating EIP-712 domain for signing");
-        let domain = eip712_domain! {
-            name: "HTLC".to_string(),
-            version: "1".to_string(),
-            chain_id: 421614u64,
-            verifying_contract: alloy::primitives::Address::from_hex("0x795Dcb58d1cd4789169D5F938Ea05E17ecEB68cA").unwrap(),
-        };
-        info!("✅ EIP-712 domain created successfully");
+            // Create domain for EIP-712 signing
+            info!("📝 Creating EIP-712 domain for signing");
+            let domain = eip712_domain! {
+                name: "HTLC".to_string(),
+                version: "1".to_string(),
+                chain_id: 421614u64,
+                verifying_contract: alloy::primitives::Address::from_hex("0x795Dcb58d1cd4789169D5F938Ea05E17ecEB68cA").unwrap(),
+            };
+            info!("✅ EIP-712 domain created successfully");
 
-        // Sign the initiate data
-        info!("✍️ Signing initiate data for order {}", order_id);
-        let signature = signer.sign_typed_data(&initiate, &domain).await?;
-        info!("✅ Successfully signed initiate data");
+            // Sign the initiate data
+            info!("✍️ Signing initiate data for order {}", order_id);
+            let signature = signer.sign_typed_data(&initiate, &domain).await?;
+            info!("✅ Successfully signed initiate data");
+
+            signature.to_string()
+        };
 
         // Create initiate request
         info!("📦 Creating initiate request for order {}", order_id);
         let initiate_request = InitiateRequest {
             order_id: order_id.to_string(),
-            signature: signature.to_string(),
+            signature: signature_str,
             perform_on: "Source".to_string(),
         };
         info!("✅ Initiate request created successfully");
 
-        // Send initiate request
+        // Send initiate request with retry
         info!("📤 Sending initiate request for order {}", order_id);
-        let response = self
-            .client
-            .post(format!("{}/initiate", self.api_url))
-            .header("api-key", &self.api_key)
-            .json(&initiate_request)
-            .send()
-            .await?;
 
-        let response_status = response.status();
-        let response_text = response.text().await?;
-        info!(
-            "📥 Received initiate response for order {}: Status {}",
-            order_id, response_status
-        );
+        // Use retry with backoff for the API call
+        self.retry_with_backoff(
+            || async {
+                let response = self
+                    .client
+                    .post(format!("{}/initiate", self.api_url))
+                    .header("api-key", &self.api_key)
+                    .json(&initiate_request)
+                    .send()
+                    .await?;
 
-        if !response_status.is_success() {
-            warn!(
-                "❌ Failed to initiate order {}: {} - {}",
-                order_id, response_status, response_text
-            );
-            return Err(eyre::eyre!(
-                "Failed to initiate order: {} - {}",
-                response_status,
-                response_text
-            ));
-        }
+                let response_status = response.status();
+                let response_text = response.text().await?;
+                info!(
+                    "📥 Received initiate response for order {}: Status {}",
+                    order_id, response_status
+                );
 
-        let response: ApiResponse<String> = serde_json::from_str(&response_text)?;
-        match response.status {
-            Status::Ok => {
-                if let Some(tx_hash) = response.data {
-                    info!(
-                        "✅ Successfully initiated order {} with tx hash: {}",
-                        order_id, tx_hash
+                if !response_status.is_success() {
+                    warn!(
+                        "❌ Failed to initiate order {}: {} - {}",
+                        order_id, response_status, response_text
                     );
-                    Ok(tx_hash)
-                } else {
-                    warn!("❌ No transaction hash in response for order {}", order_id);
-                    Err(eyre::eyre!("No transaction hash in response"))
+                    return Err(eyre::eyre!(
+                        "Failed to initiate order: {} - {}",
+                        response_status,
+                        response_text
+                    ));
                 }
-            }
-            Status::Error => {
-                let error_msg = response.error.unwrap_or_default();
-                warn!("❌ API error for order {}: {}", order_id, error_msg);
-                Err(eyre::eyre!("API error: {}", error_msg))
-            }
-        }
+
+                let response: ApiResponse<String> = serde_json::from_str(&response_text)?;
+                match response.status {
+                    Status::Ok => {
+                        if let Some(tx_hash) = response.data {
+                            info!(
+                                "✅ Successfully initiated order {} with tx hash: {}",
+                                order_id, tx_hash
+                            );
+                            Ok(tx_hash)
+                        } else {
+                            warn!("❌ No transaction hash in response for order {}", order_id);
+                            Err(eyre::eyre!("No transaction hash in response"))
+                        }
+                    }
+                    Status::Error => {
+                        let error_msg = response.error.unwrap_or_default();
+                        warn!("❌ API error for order {}: {}", order_id, error_msg);
+                        Err(eyre::eyre!("API error: {}", error_msg))
+                    }
+                }
+            },
+            3, // Max 3 retries
+            order_id,
+        )
+        .await
     }
 
     // Get order details for initiation
@@ -541,6 +756,105 @@ impl OrderService {
             order_id, secret
         );
         Ok(text)
+    }
+
+    // Check if an order is ready for redemption
+    pub async fn is_order_ready_for_redemption(&self, order_id: &str) -> Result<bool> {
+        // Get the order details
+        let order_details = self.get_order_details(order_id).await?;
+
+        // Just check if the destination swap has been initiated
+        let has_initiate_tx = !order_details
+            .result
+            .destination_swap
+            .initiate_tx_hash
+            .trim()
+            .is_empty()
+            && order_details.result.destination_swap.initiate_tx_hash != "0x";
+
+        Ok(has_initiate_tx)
+    }
+
+    // Retry redeeming an order up to max_attempts times
+    pub async fn retry_redeem_order(
+        &self,
+        order_id: &str,
+        secret: &str,
+        max_attempts: usize,
+    ) -> Result<String> {
+        let max_attempts = if max_attempts == 0 { 5 } else { max_attempts }; // Default to 5 attempts if not specified
+
+        for attempt in 1..=max_attempts {
+            info!(
+                "🔄 Redemption attempt {}/{} for order {}",
+                attempt, max_attempts, order_id
+            );
+
+            // First check if the order is ready for redemption
+            match self.is_order_ready_for_redemption(order_id).await {
+                Ok(true) => {
+                    // Order is ready, attempt to redeem it
+                    match self.redeem_order(order_id, secret).await {
+                        Ok(result) => {
+                            info!(
+                                "✅ Successfully redeemed order {} on attempt {}/{}",
+                                order_id, attempt, max_attempts
+                            );
+                            return Ok(result);
+                        }
+                        Err(e) => {
+                            warn!(
+                                "❌ Redemption attempt {}/{} failed for order {}: {}",
+                                attempt, max_attempts, order_id, e
+                            );
+                            if attempt == max_attempts {
+                                return Err(eyre::eyre!(
+                                    "Failed to redeem order after {} attempts: {}",
+                                    max_attempts,
+                                    e
+                                ));
+                            }
+                        }
+                    }
+                }
+                Ok(false) => {
+                    info!(
+                        "⏳ Order {} is not yet ready for redemption (attempt {}/{})",
+                        order_id, attempt, max_attempts
+                    );
+                    if attempt == max_attempts {
+                        return Err(eyre::eyre!(
+                            "Order not ready for redemption after {} attempts",
+                            max_attempts
+                        ));
+                    }
+                }
+                Err(e) => {
+                    warn!(
+                        "❌ Failed to check if order {} is ready for redemption (attempt {}/{}): {}",
+                        order_id, attempt, max_attempts, e
+                    );
+                    if attempt == max_attempts {
+                        return Err(eyre::eyre!(
+                            "Failed to check order redemption status after {} attempts: {}",
+                            max_attempts,
+                            e
+                        ));
+                    }
+                }
+            }
+
+            // Wait before the next attempt (exponential backoff)
+            let wait_time = std::time::Duration::from_secs(2u64.pow(attempt as u32));
+            info!("⏱️ Waiting {:?} before next redemption attempt", wait_time);
+            tokio::time::sleep(wait_time).await;
+        }
+
+        // This should never be reached due to the returns in the loop, but just in case
+        Err(eyre::eyre!(
+            "Failed to redeem order after {} attempts",
+            max_attempts
+        ))
     }
 
     pub async fn redeem_all_orders(&self, private_key: &str) -> Result<()> {

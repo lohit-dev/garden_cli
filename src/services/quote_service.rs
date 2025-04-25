@@ -100,6 +100,7 @@ impl QuoteService {
             }
         });
 
+        info!("[ATTESTED QUOTE PAYLOAD] {}", payload);
         let response = self
             .client
             .post("https://testnet.api.hashira.io/quote/attested")
