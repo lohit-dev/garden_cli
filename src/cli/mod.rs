@@ -380,7 +380,7 @@ pub async fn run() -> Result<()> {
             tasks.push(tokio::spawn(async move {
                 // Use retry_redeem_order with 5 retry attempts instead of direct redeem_order
                 let result = order_service_clone
-                    .retry_redeem_order(&order_id_clone, &secret_clone, 5)
+                    .retry_redeem_order(&order_id_clone, &secret_clone, 10)
                     .await;
                 drop(permit);
                 (order_id_clone, result)

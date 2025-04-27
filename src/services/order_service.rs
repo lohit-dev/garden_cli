@@ -1,4 +1,6 @@
+use core::time;
 use std::str::FromStr;
+use std::time::Duration;
 
 use crate::models::additional_data::{AdditonalData, SignableAdditionalData};
 use crate::models::order::{ApiResponse, AttestedResponse, Order, Status};
@@ -191,7 +193,7 @@ impl OrderService {
         info!("✅ Order updated with attested data");
 
         info!("⏳ Adding small delay before create order request...");
-        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        // tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
         info!("📤 Sending create order request...");
         let res = self
@@ -469,7 +471,7 @@ impl OrderService {
                         retries, order_id, e, delay
                     );
 
-                    // Sleep with exponential backoff
+                    // Sleep with Additional backoff
                     tokio::time::sleep(std::time::Duration::from_secs(delay)).await;
                     delay += 2;
                 }
@@ -608,6 +610,7 @@ impl OrderService {
 
         // Send initiate request with retry
         info!("📤 Sending initiate request for order {}", order_id);
+        // tokio::time::sleep(Duration::from_secs(1)).await;
 
         // Use retry with backoff for the API call
         self.retry_with_backoff(
@@ -624,6 +627,7 @@ impl OrderService {
                 let response = self
                     .client
                     .post(url)
+                    .timeout(Duration::from_secs(10))
                     .header("api-key", &self.api_key)
                     .json(&initiate_request)
                     .send()
@@ -669,7 +673,7 @@ impl OrderService {
                     }
                 }
             },
-            3, // Max 3 retries
+            5,
             order_id,
         )
         .await
@@ -821,8 +825,7 @@ impl OrderService {
         secret: &str,
         max_attempts: usize,
     ) -> Result<String> {
-        let max_attempts = if max_attempts == 0 { 10 } else { max_attempts }; // Default to 5 attempts if not specified
-
+        let max_attempts = if max_attempts == 0 { 10 } else { max_attempts };
         for attempt in 1..=max_attempts {
             info!(
                 "🔄 Redemption attempt {}/{} for order {}",
