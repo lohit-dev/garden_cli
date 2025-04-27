@@ -148,7 +148,7 @@ impl OrderService {
             initiator_source_address,
             initiator_destination_address,
             source_amount,
-            // Set the destination amount from the quote response
+            // Sets the destination amount from the quote response
             destination_amount: BigDecimal::from_str(&destination_amount)
                 .unwrap_or(BigDecimal::from(0)),
             fee: BigDecimal::from(1),
