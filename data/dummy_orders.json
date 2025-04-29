@@ -2,12 +2,12 @@
   "quotes": [
     {
       "order_pair": "arbitrum_sepolia:0x795Dcb58d1cd4789169D5F938Ea05E17ecEB68cA::starknet_sepolia:0x58ea74e863bc9a761aa20701e04b65854f5614db3eb79b2d3a76a8771694c02",
-      "amount": "10000",
+      "amount": "100000",
       "exact_out": false
     },
     {
       "order_pair": "starknet_sepolia:0x58ea74e863bc9a761aa20701e04b65854f5614db3eb79b2d3a76a8771694c02::arbitrum_sepolia:0x795Dcb58d1cd4789169D5F938Ea05E17ecEB68cA",
-      "amount": "1000000000000000",
+      "amount": "10000000000000000",
       "exact_out": false
     }
   ]

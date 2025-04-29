@@ -1,4 +1,5 @@
 pub mod args;
+pub mod continuous_orders;
 pub mod interactive;
 
 use crate::services::order_service::OrderService;
@@ -18,7 +19,7 @@ use tracing::info;
 
 pub async fn run() -> Result<()> {
     // Initialize tracing
-    tracing_subscriber::fmt::init();
+    tracing_subscriber::fmt::try_init();
     let term = Term::stdout();
 
     // 🌱 Welcome message
@@ -35,6 +36,24 @@ pub async fn run() -> Result<()> {
             .to_string(),
     )?;
     term.write_line("")?;
+
+    // Select mode
+    let options = vec!["Regular Order Flow", "Continuous Order Loop"];
+    let selection = Select::new()
+        .with_prompt(&style("🔄 Select operation mode").blue().to_string())
+        .items(&options)
+        .default(0)
+        .interact()?;
+
+    match selection {
+        0 => run_regular_flow().await,
+        1 => continuous_orders::run_continuous_orders().await,
+        _ => unreachable!(),
+    }
+}
+
+async fn run_regular_flow() -> Result<()> {
+    let term = Term::stdout();
 
     // 🌟 Start confirmation
     if !Confirm::new()

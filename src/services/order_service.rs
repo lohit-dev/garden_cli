@@ -22,6 +22,7 @@ use alloy::{
 use alloy_primitives::FixedBytes;
 use bigdecimal::BigDecimal;
 use chrono::TimeDelta;
+use dialoguer::Input;
 use eyre::Result;
 use hex;
 use reqwest::Client;
@@ -122,17 +123,17 @@ impl OrderService {
             )
         };
 
-        // info!("👤 Using initiator addresses:");
-        // info!("  🔹 Source: {}", initiator_source_address);
-        // info!("  🔹 Destination: {}", initiator_destination_address);
+        info!("👤 Using initiator addresses:");
+        info!("  🔹 Source: {}", initiator_source_address);
+        info!("  🔹 Destination: {}", initiator_destination_address);
 
         // Log all key parameters before parsing amount
-        // info!("[ORDER PARAMS] amount: {}", amount);
-        // info!("[ORDER PARAMS] order_pair: {}", order_pair);
-        // info!("[ORDER PARAMS] strategy_id: {}", strategy_id);
-        // info!("[ORDER PARAMS] input_token_price: {}", input_token_price);
-        // info!("[ORDER PARAMS] output_token_price: {}", output_token_price);
-        // info!("[ORDER PARAMS] exact_out: {}", exact_out);
+        info!("[ORDER PARAMS] amount: {}", amount);
+        info!("[ORDER PARAMS] order_pair: {}", order_pair);
+        info!("[ORDER PARAMS] strategy_id: {}", strategy_id);
+        info!("[ORDER PARAMS] input_token_price: {}", input_token_price);
+        info!("[ORDER PARAMS] output_token_price: {}", output_token_price);
+        info!("[ORDER PARAMS] exact_out: {}", exact_out);
         // Parse the amount as a BigDecimal
         let source_amount = match BigDecimal::from_str(amount) {
             Ok(amount) => amount,
@@ -154,7 +155,7 @@ impl OrderService {
             fee: BigDecimal::from(1),
             nonce: BigDecimal::from_str(&chrono::Utc::now().timestamp_millis().to_string())
                 .unwrap(),
-            min_destination_confirmations: 2,
+            min_destination_confirmations: 1,
             timelock: 7300,
             secret_hash: secret_hash,
             additional_data: AdditonalData {
@@ -267,6 +268,263 @@ impl OrderService {
                     e,
                     response_text
                 ))
+            }
+        }
+    }
+
+    // Create an order with custom initiator addresses
+    pub async fn create_order_with_custom_addresses(
+        &self,
+        strategy_id: String,
+        input_token_price: f64,
+        output_token_price: f64,
+        order_pair: &str,
+        amount: &str,
+        exact_out: bool,
+        destination_amount: String,
+        initiator_source_address: &str,
+        initiator_destination_address: &str,
+        private_key: String,
+    ) -> Result<(String, String)> {
+        // info!("🎯 Creating new order with strategy ID: {}", strategy_id);
+        let (secret, secret_hash) = self.gen_secret();
+        // info!("🔑 Generated secret and hash for order");
+
+        // Parse the order pair to extract chain and asset information
+        // info!("🔍 Parsing order pair: {}", order_pair);
+        let parts: Vec<&str> = order_pair.split("::").collect();
+        if parts.len() != 2 {
+            return Err(eyre::eyre!("Invalid order pair format: {}", order_pair));
+        }
+
+        let (src, dst) = (parts[0], parts[1]);
+        let src_parts: Vec<&str> = src.split(':').collect();
+        let dst_parts: Vec<&str> = dst.split(':').collect();
+
+        if src_parts.len() != 2 || dst_parts.len() != 2 {
+            return Err(eyre::eyre!(
+                "Invalid chain:asset format in order pair: {}",
+                order_pair
+            ));
+        }
+
+        let source_chain = src_parts[0];
+        let source_asset = src_parts[1];
+        let destination_chain = dst_parts[0];
+        let destination_asset = dst_parts[1];
+
+        // info!("📊 Parsed order details:");
+        // info!("  🔹 Source chain: {}", source_chain);
+        // info!("  🔹 Source asset: {}", source_asset);
+        // info!("  🔹 Destination chain: {}", destination_chain);
+        // info!("  🔹 Destination asset: {}", destination_asset);
+
+        // Use the provided initiator addresses
+        info!("🔄 Using custom initiator addresses:");
+        info!("  🔹 Source: {}", initiator_source_address);
+        info!("  🔹 Destination: {}", initiator_destination_address);
+
+        // Get the quote from the API
+        let (quote_id, input_token_price, output_token_price, destination_amount) =
+            self.get_quote(order_pair, amount, exact_out).await?;
+
+        // info!("📊 Received quote:");
+        // info!("  🔹 Quote ID: {}", quote_id);
+        // info!("  🔹 Input token price: {}", input_token_price);
+        // info!("  🔹 Output token price: {}", output_token_price);
+        // info!("  🔹 Destination amount: {}", destination_amount);
+
+        // Create the order object
+        let mut order = Order {
+            source_chain: source_chain.to_string(),
+            destination_chain: destination_chain.to_string(),
+            source_asset: source_asset.to_string(),
+            destination_asset: destination_asset.to_string(),
+            initiator_source_address: initiator_source_address.to_string(),
+            initiator_destination_address: initiator_destination_address.to_string(),
+            source_amount: BigDecimal::from_str(amount).unwrap_or(BigDecimal::from(0)),
+            // Sets the destination amount from the quote response
+            destination_amount: BigDecimal::from_str(&destination_amount)
+                .unwrap_or(BigDecimal::from(0)),
+            fee: BigDecimal::from(1),
+            nonce: BigDecimal::from_str(&chrono::Utc::now().timestamp_millis().to_string())
+                .unwrap(),
+            min_destination_confirmations: 1,
+            timelock: 7300,
+            secret_hash: secret_hash,
+            additional_data: AdditonalData {
+                deadline: chrono::Utc::now()
+                    .checked_add_signed(TimeDelta::minutes(10))
+                    .unwrap()
+                    .timestamp(),
+                input_token_price: input_token_price,
+                output_token_price: output_token_price,
+                strategy_id: strategy_id,
+                sig: None,
+                bitcoin_optional_recipient: None,
+                instant_refund_tx_bytes: None,
+                redeem_tx_bytes: None,
+                tx_hash: None,
+            },
+        };
+
+        // info!("✅ Order parameters built successfully");
+
+        // info!("📝 Creating signable order...");
+        let signable_order = order.signable_order();
+        // info!("✅ Signable order created");
+
+        // Log the destination amount being used
+        // info!("💰 Using destination amount: {}", order.destination_amount);
+
+        // info!("🔍 Getting attested quote...");
+        let attested = self.fetch_attested_quote(&order).await?;
+        // info!("✅ Received attested quote :{:#?}", attested);
+
+        // info!("📝 Updating order with attested data...");
+        order.additional_data.sig = Some(attested.result.additional_data.sig);
+        order.additional_data.input_token_price = attested.result.additional_data.input_token_price;
+        order.additional_data.output_token_price =
+            attested.result.additional_data.output_token_price;
+        // info!("✅ Order updated with attested data");
+
+        // info!("⏳ Adding small delay before create order request...");
+        // tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+        // info!("📤 Sending create order request...");
+        let res = self
+            .client
+            .post(format!("{}/create-order", self.api_url))
+            .header("api-key", &self.api_key)
+            .json(&order)
+            .send()
+            .await?;
+
+        let response_status = res.status();
+        let response_text = res.text().await?;
+        info!(
+            "📥 Received create order response: Status {}",
+            response_status
+        );
+
+        if !response_status.is_success() {
+            warn!(
+                "❌ Failed to create order: {} - {}",
+                response_status, response_text
+            );
+            return Err(eyre::eyre!(
+                "Failed to create order: {} - {}",
+                response_status,
+                response_text
+            ));
+        }
+
+        if response_text.trim().is_empty() {
+            warn!("❌ Empty response body received");
+            return Err(eyre::eyre!("Empty response body"));
+        }
+
+        let response: Result<ApiResponse<String>, _> = serde_json::from_str(&response_text);
+        match response {
+            Ok(response) => {
+                // info!("✅ Successfully parsed API response");
+                match response.status {
+                    Status::Ok => {
+                        if let Some(order_id) = response.data {
+                            // info!("💾 Saving order data to file...");
+                            file_utils::save_order_data(&order_id, &secret)?;
+                            let mut order_ids =
+                                file_utils::load_order_ids().unwrap_or_else(|_| Vec::new());
+                            order_ids.push(order_id.clone());
+                            file_utils::save_order_ids(&order_ids)?;
+                            info!(
+                                "✅ Successfully created order: order_id={}, secret={}",
+                                order_id, secret
+                            );
+
+                            // Return the order_id and secret early if we don't want to do the complete flow
+                            // Ok((order_id, secret))
+
+                            // STEP 2: Initiate the order
+                            info!("🚀 Initiating order {}...", order_id);
+
+                            // Initiate the order
+                            match self.initiate_order(&order_id, &private_key).await {
+                                Ok(tx_hash) => {
+                                    info!(
+                                        "✅ Successfully initiated order {} with tx hash: {}",
+                                        order_id, tx_hash
+                                    );
+
+                                    // STEP 3: Wait for order to be ready for redemption
+                                    info!("⏳ Waiting for order to be ready for redemption...");
+
+                                    // Wait for the order to be ready for redemption with a timeout
+                                    let start_time = std::time::Instant::now();
+                                    let timeout = std::time::Duration::from_secs(10000);
+
+                                    let mut is_ready = false;
+                                    while start_time.elapsed() < timeout {
+                                        match self.is_order_ready_for_redemption(&order_id).await {
+                                            Ok(ready) => {
+                                                if ready {
+                                                    is_ready = true;
+                                                    break;
+                                                }
+                                            }
+                                            Err(e) => {
+                                                warn!("❌ Error checking if order is ready: {}", e);
+                                            }
+                                        }
+
+                                        // Wait 5 seconds before checking again
+                                        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                                    }
+
+                                    if !is_ready {
+                                        info!(
+                                            "⚠️ Order not ready for redemption within timeout period"
+                                        );
+                                        return Ok((order_id, secret));
+                                    }
+
+                                    // STEP 4: Redeem the order
+                                    info!("💰 Redeeming order {}...", order_id);
+
+                                    match self.retry_redeem_order(&order_id, &secret, 5).await {
+                                        Ok(redeem_tx_hash) => {
+                                            info!(
+                                                "✅ Successfully redeemed order {} with tx hash: {}",
+                                                order_id, redeem_tx_hash
+                                            );
+                                        }
+                                        Err(e) => {
+                                            warn!("❌ Failed to redeem order {}: {}", order_id, e);
+                                        }
+                                    }
+
+                                    Ok((order_id, secret))
+                                }
+                                Err(e) => {
+                                    warn!("❌ Failed to initiate order {}: {}", order_id, e);
+                                    Ok((order_id, secret))
+                                }
+                            }
+                        } else {
+                            warn!("❌ No order ID in response");
+                            Err(eyre::eyre!("No order ID in response"))
+                        }
+                    }
+                    _ => {
+                        let err = response.error;
+                        warn!("❌ API error: {}", err.clone().unwrap_or_default());
+                        Err(eyre::eyre!("API error: {:?}", err))
+                    }
+                }
+            }
+            Err(e) => {
+                warn!("❌ Failed to parse API response: {}", e);
+                Err(eyre::eyre!("Failed to parse API response: {}", e))
             }
         }
     }
@@ -836,6 +1094,23 @@ impl OrderService {
             &FixedBytes::from_hex(private_key).expect("Invalid private key"),
         )?;
         Ok((EthereumWallet::from(signer.clone()), signer))
+    }
+
+    // Check if an order has been successfully initiated on the source chain
+    pub async fn is_source_initiated(&self, order_id: &str) -> Result<bool> {
+        // Get the order details
+        let order_details = self.get_order_details(order_id).await?;
+
+        // Check if the source swap has been initiated
+        let has_initiate_tx = !order_details
+            .result
+            .source_swap
+            .initiate_tx_hash
+            .trim()
+            .is_empty()
+            && order_details.result.source_swap.initiate_tx_hash != "0x";
+
+        Ok(has_initiate_tx)
     }
 
     // Redeem an order
