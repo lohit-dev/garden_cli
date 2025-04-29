@@ -245,10 +245,10 @@ impl OrderService {
                                 file_utils::load_order_ids().unwrap_or_else(|_| Vec::new());
                             order_ids.push(order_id.clone());
                             file_utils::save_order_ids(&order_ids)?;
-                            // info!(
-                            //     "✅ Successfully saved order data: order_id={}, secret={}",
-                            //     order_id, secret
-                            // );
+                            info!(
+                                "✅ Successfully saved order data: order_id={}, secret={}",
+                                order_id, secret
+                            );
                             Ok((order_id, secret))
                         } else {
                             warn!("❌ No order ID in response");
@@ -832,46 +832,6 @@ impl OrderService {
 
             info!("✅ Successfully signed with Starknet");
 
-            // } else {
-            //     // Use EVM signing (original implementation)
-            //     info!("🔐 Using EVM signing method");
-            //     let (wallet, signer) = self.get_default_wallet(private_key.to_string())?;
-            //     info!("✅ EVM wallet created successfully");
-
-            //     // Create the Initiate struct
-            //     info!("📦 Creating initiate struct for order {}", order_id);
-            //     let initiate = Initiate {
-            //         redeemer: alloy::primitives::Address::from_hex(
-            //             &order_details.result.source_swap.redeemer,
-            //         )
-            //         .unwrap(),
-            //         timelock: alloy_primitives::Uint::from(
-            //             order_details.result.source_swap.timelock as u64,
-            //         ),
-            //         amount: order_details.result.source_swap.amount.parse().unwrap(),
-            //         secretHash: FixedBytes::from_hex(&order_details.result.source_swap.secret_hash)
-            //             .unwrap(),
-            //     };
-            //     info!("✅ Initiate struct created successfully");
-
-            //     // Create domain for EIP-712 signing
-            //     info!("📝 Creating EIP-712 domain for signing");
-            //     let domain = eip712_domain! {
-            //         name: "HTLC".to_string(),
-            //         version: "1".to_string(),
-            //         chain_id: 421614u64,
-            //         verifying_contract: alloy::primitives::Address::from_hex("0x795Dcb58d1cd4789169D5F938Ea05E17ecEB68cA").unwrap(),
-            //     };
-            //     info!("✅ EIP-712 domain created successfully");
-
-            //     // Sign the initiate data
-            //     info!("✍️ Signing initiate data for order {}", order_id);
-            //     let signature = signer.sign_typed_data(&initiate, &domain).await?;
-            //     info!("✅ Successfully signed initiate data");
-
-            //     signature.to_string()
-            // };
-
             // Create initiate request
             // info!("📦 Creating initiate request for order {}", order_id);
             let initiate_request = StarkInitiateRequst {
@@ -879,11 +839,7 @@ impl OrderService {
                 signature: vec![signature.r.to_string(), signature.s.to_string()],
                 perform_on: "Source".to_string(),
             };
-            // info!("✅ Initiate request created successfully");
-
-            // Send initiate request with retry
-            // info!("📤 Sending initiate request for order {}", order_id);
-            // tokio::time::sleep(Duration::from_secs(1)).await;
+            info!("✅ Initiate request created successfully");
 
             // Use retry with backoff for the API call
             self.retry_with_backoff(

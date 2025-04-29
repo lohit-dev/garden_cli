@@ -25,7 +25,7 @@ pub fn save_order_ids(order_ids: &[String]) -> Result<()> {
 }
 
 pub fn save_order_data(order_id: &str, secret: &str) -> Result<()> {
-    // Create data directory if it doesn't exist
+    
     std::fs::create_dir_all("data")?;
 
     let mut all_orders = match load_order_data() {

@@ -24,11 +24,11 @@ pub struct QuoteResult {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct RedeemRequest {
-    /// Unique identifier of the order
+    
     pub order_id: String,
-    /// Secret used to redeem the order
+    
     pub secret: String,
-    /// Which chain to perform the redemption on
+    
     pub perform_on: String,
 }
 
@@ -41,14 +41,14 @@ sol! {
     }
 }
 
-// Keep the original Initiate struct but rename it to avoid conflicts
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct InitiateRequest {
-    /// Unique identifier of the order
+    
     pub order_id: String,
-    /// EIP-712 signature for the initiate request
+    
     pub signature: String,
-    /// Which chain to perform the swap on
+    
     pub perform_on: String,
 }
 

@@ -14,10 +14,8 @@ use std::time::Duration;
 use tracing::info;
 
 pub async fn run_continuous_orders() -> Result<()> {
-    // Initialize tracing
     let term = Term::stdout();
 
-    // 🌱 Welcome message
     term.write_line(
         &style("🌼 Welcome to the Garden SDK Continuous Order CLI!")
             .green()
@@ -32,7 +30,6 @@ pub async fn run_continuous_orders() -> Result<()> {
     )?;
     term.write_line("")?;
 
-    // 📄 Load dummy orders
     let dummy_orders_path = Path::new("data/dummy_orders.json");
     let dummy_quotes = match load_dummy_orders(dummy_orders_path) {
         Ok(quotes) => quotes,
@@ -45,7 +42,6 @@ pub async fn run_continuous_orders() -> Result<()> {
         }
     };
 
-    // 🔗 Chain pair selection
     let chain_pairs = list_available_chain_pairs(&dummy_quotes);
     let chain_pair_options: Vec<String> = chain_pairs
         .iter()
@@ -72,7 +68,6 @@ pub async fn run_continuous_orders() -> Result<()> {
         .green()
     );
 
-    // Get initiator source address
     let initiator_source_address: String = Input::new()
         .with_prompt(
             &style("🏢 Enter initiator source address")
@@ -81,7 +76,6 @@ pub async fn run_continuous_orders() -> Result<()> {
         )
         .interact_text()?;
 
-    // Get initiator destination address
     let initiator_destination_address: String = Input::new()
         .with_prompt(
             &style("🏢 Enter initiator destination address")
@@ -90,7 +84,6 @@ pub async fn run_continuous_orders() -> Result<()> {
         )
         .interact_text()?;
 
-    // 🔑 Get private key for signing transactions
     let private_key: String = Input::new()
         .with_prompt(
             &style("🔑 Enter your private key for signing transactions")
@@ -99,11 +92,9 @@ pub async fn run_continuous_orders() -> Result<()> {
         )
         .interact_text()?;
 
-    // Find the quote for the selected chain pair
     let quote = find_quote_by_chains(&dummy_quotes, &selected_pair.0, &selected_pair.1)
         .expect("No quote found for selected chain pair");
 
-    // Get the number of iterations to run (0 for infinite)
     let iterations: u32 = Input::new()
         .with_prompt(
             &style("🔄 How many iterations to run? (0 for infinite)")
@@ -112,7 +103,6 @@ pub async fn run_continuous_orders() -> Result<()> {
         )
         .interact_text()?;
 
-    // Get delay between iterations
     let delay_seconds: u64 = Input::new()
         .with_prompt(
             &style("⏱️ Delay between iterations (seconds)")
@@ -122,10 +112,8 @@ pub async fn run_continuous_orders() -> Result<()> {
         .default(5)
         .interact_text()?;
 
-    // Initialize the order service
     let order_service = OrderService::new();
 
-    // Start the continuous loop
     println!(
         "{}",
         style("🔄 Starting continuous order process...")
@@ -135,7 +123,6 @@ pub async fn run_continuous_orders() -> Result<()> {
 
     let mut iteration_count = 0;
     loop {
-        // Check if we've reached the desired number of iterations
         if iterations > 0 && iteration_count >= iterations {
             println!(
                 "{}",
@@ -154,7 +141,6 @@ pub async fn run_continuous_orders() -> Result<()> {
                 .bold()
         );
 
-        // STEP 1: Get quote
         println!("{}", style("📦 Getting quote...").yellow());
 
         match order_service
@@ -183,7 +169,6 @@ pub async fn run_continuous_orders() -> Result<()> {
                     style(format!("💰 Destination amount: {}", destination_amount)).green()
                 );
 
-                // STEP 2: Create order
                 println!("{}", style("📦 Creating order...").yellow());
 
                 match order_service
@@ -226,7 +211,6 @@ pub async fn run_continuous_orders() -> Result<()> {
             }
         }
 
-        // Wait before the next iteration
         if iterations == 0 || iteration_count < iterations {
             println!(
                 "{}",
