@@ -351,11 +351,11 @@ impl OrderService {
             nonce: BigDecimal::from_str(&chrono::Utc::now().timestamp_millis().to_string())
                 .unwrap(),
             min_destination_confirmations: 0,
-            timelock: 2880,
+            timelock: 7300,
             secret_hash: secret_hash,
             additional_data: AdditonalData {
                 deadline: chrono::Utc::now()
-                    .checked_add_signed(TimeDelta::minutes(60))
+                    .checked_add_signed(TimeDelta::minutes(180))
                     .unwrap()
                     .timestamp(),
                 input_token_price: input_token_price,

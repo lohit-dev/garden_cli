@@ -259,7 +259,7 @@ pub async fn run_continuous_orders() -> Result<()> {
                                 );
 
                                 // Poll for order readiness with a timeout
-                                let max_poll_attempts = 10;
+                                let max_poll_attempts = 1000;
                                 let mut is_ready = false;
 
                                 for attempt in 1..=max_poll_attempts {
