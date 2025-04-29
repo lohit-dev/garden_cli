@@ -154,39 +154,10 @@ pub async fn run_continuous_orders() -> Result<()> {
                 .bold()
         );
 
-        // STEP 1: Create Order
-        println!("{}", style("📦 Creating order...").yellow());
+        // STEP 1: Get quote
+        println!("{}", style("📦 Getting quote...").yellow());
 
-        let order_pair = quote.order_pair.clone();
-        let amount = quote.amount.clone();
-
-        // Parse the order pair to extract chain information
-        let parts: Vec<&str> = order_pair.split("::").collect();
-        if parts.len() != 2 {
-            println!(
-                "{}",
-                style(format!("❌ Invalid order pair format: {}", order_pair)).red()
-            );
-            continue;
-        }
-
-        let (src, dst) = (parts[0], parts[1]);
-        let src_parts: Vec<&str> = src.split(':').collect();
-
-        if src_parts.len() < 1 {
-            println!(
-                "{}",
-                style(format!("❌ Invalid source chain format: {}", src)).red()
-            );
-            continue;
-        }
-
-        let source_chain = src_parts[0];
-
-        // Create a custom implementation to override the default behavior in OrderService
-        let order_service_clone = order_service.clone();
-
-        let quote = match order_service_clone
+        match order_service
             .get_quote(&quote.order_pair, &quote.amount, quote.exact_out)
             .await
         {
@@ -207,16 +178,15 @@ pub async fn run_continuous_orders() -> Result<()> {
                     ))
                     .green()
                 );
-
                 println!(
                     "{}",
                     style(format!("💰 Destination amount: {}", destination_amount)).green()
                 );
 
-                // Create order with the complete flow (create, initiate, redeem)
-                println!("{}", style("📦 Creating and processing order...").yellow());
+                // STEP 2: Create order
+                println!("{}", style("📦 Creating order...").yellow());
 
-                match order_service_clone
+                match order_service
                     .create_order_with_custom_addresses(
                         strategy_id,
                         input_price,
@@ -227,14 +197,14 @@ pub async fn run_continuous_orders() -> Result<()> {
                         destination_amount,
                         &initiator_source_address,
                         &initiator_destination_address,
-                        private_key.to_string(),
+                        private_key.clone(),
                     )
                     .await
                 {
                     Ok((order_id, secret)) => {
                         println!(
                             "{}",
-                            style(format!("✅ Order processed with ID: {}", order_id))
+                            style(format!("✅ Order created with ID: {}", order_id))
                                 .green()
                                 .bold()
                         );
@@ -242,82 +212,11 @@ pub async fn run_continuous_orders() -> Result<()> {
                             "{}",
                             style(format!("🔑 Order secret: {}", secret)).green().dim()
                         );
-
-                        // Check if the order has been successfully initiated on the source chain
-                        println!(
-                            "{}",
-                            style("🔍 Checking if order has been initiated on source chain...")
-                                .yellow()
-                        );
-
-                        // Try up to 5 times with 3 seconds between attempts
-                        let max_retries = 5;
-                        let mut is_initiated = false;
-
-                        // Create a new OrderService instance for checking initiation status
-                        let status_service = OrderService::new();
-
-                        for retry in 1..=max_retries {
-                            println!(
-                                "{}",
-                                style(format!(
-                                    "🔄 Checking source initiation (attempt {}/{})",
-                                    retry, max_retries
-                                ))
-                                .cyan()
-                            );
-
-                            match status_service.is_source_initiated(&order_id).await {
-                                Ok(true) => {
-                                    println!(
-                                        "{}",
-                                        style("✅ Order successfully initiated on source chain!")
-                                            .green()
-                                            .bold()
-                                    );
-                                    is_initiated = true;
-                                    break;
-                                }
-                                Ok(false) => {
-                                    println!(
-                                        "{}",
-                                        style(
-                                            "⏳ Order not yet initiated on source chain, waiting..."
-                                        )
-                                        .yellow()
-                                    );
-                                }
-                                Err(e) => {
-                                    println!(
-                                        "{}",
-                                        style(format!("❌ Error checking order initiation: {}", e))
-                                            .red()
-                                    );
-                                }
-                            }
-
-                            if retry < max_retries {
-                                println!(
-                                    "{}",
-                                    style("⏱️ Waiting 3 seconds before next check...").dim()
-                                );
-                                tokio::time::sleep(std::time::Duration::from_secs(3)).await;
-                            }
-                        }
-
-                        if !is_initiated {
-                            println!(
-                                "{}",
-                                style("⚠️ Could not confirm source chain initiation after multiple attempts")
-                                    .yellow()
-                                    .bold()
-                            );
-                        }
                     }
                     Err(e) => {
                         println!(
                             "{}",
-                            style(format!("❌ Failed to process order: {}", e)).red()
+                            style(format!("❌ Failed to create order: {}", e)).red()
                         );
                     }
                 }
@@ -325,7 +224,7 @@ pub async fn run_continuous_orders() -> Result<()> {
             Err(e) => {
                 println!("{}", style(format!("❌ Failed to get quote: {}", e)).red());
             }
-        };
+        }
 
         // Wait before the next iteration
         if iterations == 0 || iteration_count < iterations {

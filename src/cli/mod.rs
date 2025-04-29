@@ -18,8 +18,7 @@ use std::sync::Arc;
 use tracing::info;
 
 pub async fn run() -> Result<()> {
-    // Initialize tracing
-    tracing_subscriber::fmt::try_init();
+    // Initialize tracing is now handled in main.rs
     let term = Term::stdout();
 
     // 🌱 Welcome message
