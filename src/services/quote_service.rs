@@ -15,7 +15,8 @@ impl QuoteService {
     pub fn new() -> Self {
         Self {
             client: Client::new(),
-            api_url: String::from("https://evm-relay-stage.hashira.io"),
+            // api_url: String::from("https://evm-relay-stage.hashira.io"),
+            api_url: String::from("https://relayer.garden.finance"),
             api_key: String::from(
                 "AAAAAGnnHDw6OuFGHwJsgTQFutrJ4__itFiulz-_iRsD-c-OBaOhqZ4KWhB98QhtVYybp2UFWcv8O2LIoB7EmL77dkeQZ_4isbYc",
             ),
@@ -29,9 +30,10 @@ impl QuoteService {
         amount: &str,
         exact_out: bool,
     ) -> Result<(String, f64, f64)> {
-        // info!("Fetching quote from Garden Finance API...");
+        info!("Fetching quote from Garden Finance API...");
         let url = format!(
-            "https://testnet.api.hashira.io/quote?order_pair={}&amount={}&exact_out={}",
+            // "https://testnet.api.hashira.io/quote?order_pair={}&amount={}&exact_out={}",
+            "https://testnet.api.garden.finance/quote?order_pair={}&amount={}&exact_out={}",
             order_pair, amount, exact_out
         );
 
@@ -46,7 +48,7 @@ impl QuoteService {
         let response_status = response.status();
         let response_text = response.text().await?;
 
-        // info!("Quote API Status: {}", response_status);
+        info!("Quote API Status: {}", response_status);
 
         if !response_status.is_success() {
             return Err(eyre::eyre!(
@@ -79,7 +81,7 @@ impl QuoteService {
         &self,
         order_params: &Order<SignableAdditionalData>,
     ) -> Result<AttestedResponse> {
-        // info!("Getting attested quote from Garden Finance API...");
+        info!("Getting attested quote from Garden Finance API...");
         let payload = serde_json::json!({
             "source_chain": order_params.source_chain,
             "destination_chain": order_params.destination_chain,
@@ -100,10 +102,11 @@ impl QuoteService {
             }
         });
 
-        // info!("[ATTESTED QUOTE PAYLOAD] {}", payload);
+        info!("[ATTESTED QUOTE PAYLOAD] {}", payload);
         let response = self
             .client
-            .post("https://testnet.api.hashira.io/quote/attested")
+            // .post("https://testnet.api.hashira.io/quote/attested")
+            .post("https://testnet.api.garden.finance/quote/attested")
             .header("accept", "application/json")
             .header("Content-Type", "application/json")
             .header("api-key", &self.api_key)
@@ -114,8 +117,8 @@ impl QuoteService {
         let response_status = response.status();
         let response_text = response.text().await?;
 
-        // info!("Attestation API Status: {}", response_status);
-        // info!("Attestation API Response: {}", response_text);
+        info!("Attestation API Status: {}", response_status);
+        info!("Attestation API Response: {}", response_text);
 
         if !response_status.is_success() {
             return Err(eyre::eyre!(

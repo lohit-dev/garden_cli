@@ -40,9 +40,28 @@ pub struct OrderService {
 
 impl OrderService {
     pub fn new() -> Self {
+        // staging
+        // Self {
+        //     client: Client::new(),
+        //     api_url: String::from("https://evm-relay-stage.hashira.io"),
+        //     api_key: String::from(
+        //         "AAAAAGnnHDw6OuFGHwJsgTQFutrJ4__itFiulz-_iRsD-c-OBaOhqZ4KWhB98QhtVYybp2UFWcv8O2LIoB7EmL77dkeQZ_4isbYc",
+        //     ),
+        // }
+
+        // testnet
+        // Self {
+        //     client: Client::new(),
+        //     api_url: String::from("https://relayer.garden.finance"),
+        //     api_key: String::from(
+        //         "AAAAAGnnHDw6OuFGHwJsgTQFutrJ4__itFiulz-_iRsD-c-OBaOhqZ4KWhB98QhtVYybp2UFWcv8O2LIoB7EmL77dkeQZ_4isbYc",
+        //     ),
+        // }
+
+        // mainnet
         Self {
             client: Client::new(),
-            api_url: String::from("https://evm-relay-stage.hashira.io"),
+            api_url: String::from("https://relayerv2.garden.finance"),
             api_key: String::from(
                 "AAAAAGnnHDw6OuFGHwJsgTQFutrJ4__itFiulz-_iRsD-c-OBaOhqZ4KWhB98QhtVYybp2UFWcv8O2LIoB7EmL77dkeQZ_4isbYc",
             ),
@@ -72,12 +91,13 @@ impl OrderService {
         exact_out: bool,
         destination_amount: String,
     ) -> Result<(String, String)> {
-        // info!("🎯 Creating new order with strategy ID: {}", strategy_id);
+        info!("🎯 Creating new order with strategy ID: {}", strategy_id);
         let (secret, secret_hash) = self.gen_secret();
-        // info!("🔑 Generated secret and hash for order");
+        info!("🔑 Generated secret and hash for order");
+        info!("Secret is: {:?}", secret);
 
         // Parse the order pair to extract chain and asset information
-        // info!("🔍 Parsing order pair: {}", order_pair);
+        info!("🔍 Parsing order pair: {}", order_pair);
         let parts: Vec<&str> = order_pair.split("::").collect();
         if parts.len() != 2 {
             return Err(eyre::eyre!("Invalid order pair format: {}", order_pair));
@@ -99,11 +119,11 @@ impl OrderService {
         let destination_chain = dst_parts[0];
         let destination_asset = dst_parts[1];
 
-        // info!("📊 Parsed order details:");
-        // info!("  🔹 Source chain: {}", source_chain);
-        // info!("  🔹 Source asset: {}", source_asset);
-        // info!("  🔹 Destination chain: {}", destination_chain);
-        // info!("  🔹 Destination asset: {}", destination_asset);
+        info!("📊 Parsed order details:");
+        info!("  🔹 Source chain: {}", source_chain);
+        info!("  🔹 Source asset: {}", source_asset);
+        info!("  🔹 Destination chain: {}", destination_chain);
+        info!("  🔹 Destination asset: {}", destination_asset);
 
         // Set the correct initiator addresses based on source chain
         let (initiator_source_address, initiator_destination_address) = if source_chain
@@ -122,17 +142,17 @@ impl OrderService {
             )
         };
 
-        // info!("👤 Using initiator addresses:");
-        // info!("  🔹 Source: {}", initiator_source_address);
-        // info!("  🔹 Destination: {}", initiator_destination_address);
+        info!("👤 Using initiator addresses:");
+        info!("  🔹 Source: {}", initiator_source_address);
+        info!("  🔹 Destination: {}", initiator_destination_address);
 
         // Log all key parameters before parsing amount
-        // info!("[ORDER PARAMS] amount: {}", amount);
-        // info!("[ORDER PARAMS] order_pair: {}", order_pair);
-        // info!("[ORDER PARAMS] strategy_id: {}", strategy_id);
-        // info!("[ORDER PARAMS] input_token_price: {}", input_token_price);
-        // info!("[ORDER PARAMS] output_token_price: {}", output_token_price);
-        // info!("[ORDER PARAMS] exact_out: {}", exact_out);
+        info!("[ORDER PARAMS] amount: {}", amount);
+        info!("[ORDER PARAMS] order_pair: {}", order_pair);
+        info!("[ORDER PARAMS] strategy_id: {}", strategy_id);
+        info!("[ORDER PARAMS] input_token_price: {}", input_token_price);
+        info!("[ORDER PARAMS] output_token_price: {}", output_token_price);
+        info!("[ORDER PARAMS] exact_out: {}", exact_out);
         // Parse the amount as a BigDecimal
         let source_amount = match BigDecimal::from_str(amount) {
             Ok(amount) => amount,
@@ -145,8 +165,10 @@ impl OrderService {
             destination_chain: destination_chain.to_string(),
             source_asset: source_asset.to_string(),
             destination_asset: destination_asset.to_string(),
-            initiator_source_address,
-            initiator_destination_address,
+            initiator_source_address:
+                "b15dcbdaa857b59c44107f09021c85cb6e9b4d1bee9b90a922f1f14a2ae8e44a".to_string(),
+            initiator_destination_address:
+                "0x02Ff86d284eabA0f21B2B884cfE15128f8251fb2737800aE9b973832F67B69B9".to_string(),
             source_amount,
             // Sets the destination amount from the quote response
             destination_amount: BigDecimal::from_str(&destination_amount)
@@ -154,7 +176,7 @@ impl OrderService {
             fee: BigDecimal::from(1),
             nonce: BigDecimal::from_str(&chrono::Utc::now().timestamp_millis().to_string())
                 .unwrap(),
-            min_destination_confirmations: 2,
+            min_destination_confirmations: 1,
             timelock: 7300,
             secret_hash: secret_hash,
             additional_data: AdditonalData {
@@ -172,25 +194,25 @@ impl OrderService {
                 tx_hash: None,
             },
         };
-        // info!("✅ Order parameters built successfully");
+        info!("✅ Order parameters built successfully");
 
-        // info!("📝 Creating signable order...");
+        info!("📝 Creating signable order...");
         let signable_order = order.signable_order();
-        // info!("✅ Signable order created");
+        info!("✅ Signable order created");
 
         // Log the destination amount being used
-        // info!("💰 Using destination amount: {}", order.destination_amount);
+        info!("💰 Using destination amount: {}", order.destination_amount);
 
-        // info!("🔍 Getting attested quote...");
+        info!("🔍 Getting attested quote...");
         let attested = self.fetch_attested_quote(&order).await?;
-        // info!("✅ Received attested quote :{:#?}", attested);
+        info!("✅ Received attested quote :{:#?}", attested);
 
         // info!("📝 Updating order with attested data...");
         order.additional_data.sig = Some(attested.result.additional_data.sig);
         order.additional_data.input_token_price = attested.result.additional_data.input_token_price;
         order.additional_data.output_token_price =
             attested.result.additional_data.output_token_price;
-        // info!("✅ Order updated with attested data");
+        info!("✅ Order updated with attested data");
 
         // info!("⏳ Adding small delay before create order request...");
         // tokio::time::sleep(std::time::Duration::from_secs(1)).await;
@@ -201,7 +223,7 @@ impl OrderService {
             .post(format!("{}/create-order", self.api_url))
             .header("accept", "application/json")
             .header("Content-Type", "application/json")
-            .header("api-key", &self.api_key)
+            .header("Authorization", "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJ1c2VyX2lkIjoiMHgxNTgwNjVjNTBjN0U0NmJBYzIwNjFFMTU3RkMxMTJEOTU0QTZkMzkxIiwiZXhwIjoxNzQ2MDEyNTcwfQ.E3FLFxhO7Fq_3dUvCIQ8THHKZ--cjCDwlP8pPJBddmE")
             .json(&order)
             .send()
             .await?;
@@ -233,20 +255,20 @@ impl OrderService {
         let response: Result<ApiResponse<String>, _> = serde_json::from_str(&response_text);
         match response {
             Ok(response) => {
-                // info!("✅ Successfully parsed API response");
+                info!("✅ Successfully parsed API response");
                 match response.status {
                     Status::Ok => {
                         if let Some(order_id) = response.data {
-                            // info!("💾 Saving order data to file...");
+                            info!("💾 Saving order data to file...");
                             file_utils::save_order_data(&order_id, &secret)?;
                             let mut order_ids =
                                 file_utils::load_order_ids().unwrap_or_else(|_| Vec::new());
                             order_ids.push(order_id.clone());
                             file_utils::save_order_ids(&order_ids)?;
-                            // info!(
-                            //     "✅ Successfully saved order data: order_id={}, secret={}",
-                            //     order_id, secret
-                            // );
+                            info!(
+                                "✅ Successfully saved order data: order_id={}, secret={}",
+                                order_id, secret
+                            );
                             Ok((order_id, secret))
                         } else {
                             warn!("❌ No order ID in response");
@@ -278,8 +300,8 @@ impl OrderService {
         amount: &str,
         exact_out: bool,
     ) -> Result<(String, f64, f64, String)> {
-        // info!("💱 Fetching quote for order pair: {}", order_pair);
-        // info!("📊 Amount: {}, Exact Out: {}", amount, exact_out);
+        info!("💱 Fetching quote for order pair: {}", order_pair);
+        info!("📊 Amount: {}, Exact Out: {}", amount, exact_out);
 
         let quote_request = QuoteRequest {
             order_pair: order_pair.to_string(),
@@ -288,7 +310,9 @@ impl OrderService {
         };
 
         let url = format!(
-            "https://testnet.api.hashira.io/quote?order_pair={}&amount={}&exact_out={}",
+            // "https://testnet.api.hashira.io/quote?order_pair={}&amount={}&exact_out={}",
+            // "https://testnet.api.garden.finance/quote?order_pair={}&amount={}&exact_out={}",
+            "https://pricev2.garden.finance?order_pair={}&amount={}&exact_out={}",
             quote_request.order_pair, quote_request.amount, quote_request.exact_out
         );
 
@@ -303,7 +327,7 @@ impl OrderService {
 
         let response_status = response.status();
         let response_text = response.text().await?;
-        // info!("📥 Received quote response: Status {}", response_status);
+        info!("📥 Received quote response: Status {}", response_status);
 
         if !response_status.is_success() {
             warn!(
@@ -329,16 +353,16 @@ impl OrderService {
         }
 
         if let Some((strategy_id, _)) = quote_response.result.quotes.iter().next() {
-            // info!("✅ Successfully retrieved quote:");
-            // info!("  📊 Strategy ID: {}", strategy_id);
-            // info!(
-            //     "  💰 Input token price: {}",
-            //     quote_response.result.input_token_price
-            // );
-            // info!(
-            //     "  💰 Output token price: {}",
-            //     quote_response.result.output_token_price
-            // );
+            info!("✅ Successfully retrieved quote:");
+            info!("  📊 Strategy ID: {}", strategy_id);
+            info!(
+                "  💰 Input token price: {}",
+                quote_response.result.input_token_price
+            );
+            info!(
+                "  💰 Output token price: {}",
+                quote_response.result.output_token_price
+            );
             // Get the destination amount for this strategy
             let destination_amount = quote_response
                 .result
@@ -365,19 +389,19 @@ impl OrderService {
         &self,
         order_params: &Order<AdditonalData>,
     ) -> Result<AttestedResponse> {
-        // info!("🔍 Getting attested quote for order...");
-        // info!("📝 Building attestation payload...");
+        info!("🔍 Getting attested quote for order...");
+        info!("📝 Building attestation payload...");
 
-        // info!("HERE ARE THE PARAMS");
-        // info!("order_params:{:#?}", order_params);
-        // info!(
-        //     "Source Amount: {:#?}",
-        //     order_params.source_amount.to_string()
-        // );
-        // info!(
-        //     "Destination Amount: {:#?}",
-        //     order_params.destination_amount.to_string()
-        // );
+        info!("HERE ARE THE PARAMS");
+        info!("order_params:{:#?}", order_params);
+        info!(
+            "Source Amount: {:#?}",
+            order_params.source_amount.to_string()
+        );
+        info!(
+            "Destination Amount: {:#?}",
+            order_params.destination_amount.to_string()
+        );
 
         let payload = serde_json::json!({
             "source_chain": order_params.source_chain,
@@ -403,7 +427,9 @@ impl OrderService {
         // info!("📤 Sending attestation request...");
         let response = self
             .client
-            .post("https://testnet.api.hashira.io/quote/attested")
+            // .post("https://testnet.api.hashira.io/quote/attested")
+            // .post("https://testnet.api.garden.finance/quote/attested")
+            .post("https://pricev2.garden.finance/attested")
             .header("accept", "application/json")
             .header("Content-Type", "application/json")
             .header("api-key", &self.api_key)
@@ -414,11 +440,11 @@ impl OrderService {
         let response_status = response.status();
         let response_text = response.text().await?;
 
-        // info!(
-        //     "📥 Received attestation response: Status {}",
-        //     response_status
-        // );
-        // info!("📝 Response body: {}", response_text);
+        info!(
+            "📥 Received attestation response: Status {}",
+            response_status
+        );
+        info!("📝 Response body: {}", response_text);
 
         if !response_status.is_success() {
             warn!(
@@ -432,9 +458,9 @@ impl OrderService {
             ));
         }
 
-        // info!("📝 Parsing attestation response...");
+        info!("📝 Parsing attestation response...");
         let attestation: AttestedResponse = serde_json::from_str(&response_text)?;
-        // info!("✅ Successfully parsed attestation response");
+        info!("✅ Successfully parsed attestation response");
         Ok(attestation)
     }
 
@@ -480,15 +506,15 @@ impl OrderService {
     }
 
     pub async fn initiate_order(&self, order_id: &str, private_key: &str) -> Result<String> {
-        // info!("🚀 Initiating order {}...", order_id);
-        // info!("📝 Getting order details for order {}", order_id);
+        info!("🚀 Initiating order {}...", order_id);
+        info!("📝 Getting order details for order {}", order_id);
 
         // Get order details
         let order_details = self.get_order_details(order_id).await?;
-        // info!(
-        //     "✅ Successfully retrieved order details for order {}",
-        //     order_id
-        // );
+        info!(
+            "✅ Successfully retrieved order details for order {}",
+            order_id
+        );
 
         // Check if the source chain is starknet
         let is_starknet_source = order_details
@@ -496,10 +522,10 @@ impl OrderService {
             .create_order
             .source_chain
             .starts_with("starknet");
-        // info!(
-        //     "🔍 Source chain: {}, is starknet: {}",
-        //     order_details.result.create_order.source_chain, is_starknet_source
-        // );
+        info!(
+            "🔍 Source chain: {}, is starknet: {}",
+            order_details.result.create_order.source_chain, is_starknet_source
+        );
 
         // Construct the order pair for signature generation
         let order_pair = format!(
@@ -509,16 +535,16 @@ impl OrderService {
             order_details.result.create_order.destination_chain,
             order_details.result.create_order.destination_asset
         );
-        // info!("🔗 Order pair: {}", order_pair);
+        info!("🔗 Order pair: {}", order_pair);
 
         // Get wallet for signing
-        // info!("🔑 Creating wallet from private key");
+        info!("🔑 Creating wallet from private key");
 
         // Different signing process based on source chain
         // let signature_str =
         // if is_starknet_source {
         // Use starknet signing
-        // info!("🔐 Using Starknet signing method");
+        info!("🔐 Using Starknet signing method");
         if is_starknet_source {
             let (signer, account) = get_signer_and_account(
                 Felt::from_hex(private_key).unwrap(),
@@ -526,7 +552,7 @@ impl OrderService {
             )
             .await;
 
-            // info!("✅ Starknet wallet created successfully");
+            info!("✅ Starknet wallet created successfully");
 
             // Get the redeemer, amount, timelock, and secret_hash from order details
             let redeemer = &order_details.result.source_swap.redeemer;
@@ -539,14 +565,14 @@ impl OrderService {
             let timelock = order_details.result.source_swap.timelock as u128;
             let secret_hash = &order_details.result.source_swap.secret_hash;
 
-            // info!("📦 Preparing Starknet signature parameters");
-            // info!("  🔹 Redeemer: {}", redeemer);
-            // info!("  🔹 Amount: {}", amount);
-            // info!("  🔹 Timelock: {}", timelock);
-            // info!("  🔹 Secret Hash: {}", secret_hash);
+            info!("📦 Preparing Starknet signature parameters");
+            info!("  🔹 Redeemer: {}", redeemer);
+            info!("  🔹 Amount: {}", amount);
+            info!("  🔹 Timelock: {}", timelock);
+            info!("  🔹 Secret Hash: {}", secret_hash);
 
             // Call the starknet signature function
-            // info!("✍️ Signing with Starknet for order {}", order_id);
+            info!("✍️ Signing with Starknet for order {}", order_id);
             let signature = get_intiate_signature(
                 signer,
                 account,
@@ -558,7 +584,7 @@ impl OrderService {
             .await
             .unwrap();
 
-            // info!("✅ Successfully signed with Starknet");
+            info!("✅ Successfully signed with Starknet");
 
             // } else {
             //     // Use EVM signing (original implementation)
@@ -607,10 +633,10 @@ impl OrderService {
                 signature: vec![signature.r.to_string(), signature.s.to_string()],
                 perform_on: "Source".to_string(),
             };
-            // info!("✅ Initiate request created successfully");
+            info!("✅ Initiate request created successfully");
 
             // Send initiate request with retry
-            // info!("📤 Sending initiate request for order {}", order_id);
+            info!("📤 Sending initiate request for order {}", order_id);
             // tokio::time::sleep(Duration::from_secs(1)).await;
 
             // Use retry with backoff for the API call
@@ -618,12 +644,13 @@ impl OrderService {
                 || async {
                     // Use different URL for Starknet source chains
                     let url = if is_starknet_source {
-                        "https://starknet-relayer.hashira.io/initiate".to_string()
+                        // "https://starknet-relayer.hashira.io/initiate".to_string()
+                        "https://starknet-relay.garden.finance/initiate".to_string()
                     } else {
                         format!("{}/initiate", self.api_url)
                     };
 
-                    // info!("🔗 Using initiate URL: {}", url);
+                    info!("🔗 Using initiate URL: {}", url);
 
                     let response = self
                         .client
@@ -636,10 +663,10 @@ impl OrderService {
 
                     let response_status = response.status();
                     let response_text = response.text().await?;
-                    // info!(
-                    //     "📥 Received initiate response for order {}: Status {}",
-                    //     order_id, response_status
-                    // );
+                    info!(
+                        "📥 Received initiate response for order {}: Status {}",
+                        order_id, response_status
+                    );
 
                     if !response_status.is_success() {
                         warn!(
@@ -786,9 +813,10 @@ impl OrderService {
 
     // Get order details for initiation
     async fn get_order_details(&self, order_id: &str) -> Result<OrderDetails> {
-        // info!("📝 Fetching order details for order {}", order_id);
+        info!("📝 Fetching order details for order {}", order_id);
         let url = format!(
-            "https://testnet.api.hashira.io/orders/id/matched/{}",
+            // "https://testnet.api.hashira.io/orders/id/matched/{}",
+            "https://testnet.api.garden.finance/orders/id/matched/{}",
             order_id
         );
 
@@ -802,10 +830,10 @@ impl OrderService {
 
         let status = response.status();
         let text = response.text().await?;
-        // info!(
-        //     "📥 Received order details response for order {}: Status {}",
-        //     order_id, status
-        // );
+        info!(
+            "📥 Received order details response for order {}: Status {}",
+            order_id, status
+        );
 
         if !status.is_success() {
             warn!(
@@ -820,10 +848,10 @@ impl OrderService {
         }
 
         let order_details: OrderDetails = serde_json::from_str(&text)?;
-        // info!(
-        //     "✅ Successfully parsed order details for order {}",
-        //     order_id
-        // );
+        info!(
+            "✅ Successfully parsed order details for order {}",
+            order_id
+        );
         Ok(order_details)
     }
 
@@ -840,10 +868,10 @@ impl OrderService {
 
     // Redeem an order
     pub async fn redeem_order(&self, order_id: &str, secret: &str) -> Result<String> {
-        // info!("🎁 Redeeming order {}...", order_id);
+        info!("🎁 Redeeming order {}...", order_id);
 
         // Get order details to determine destination chain
-        // info!("📝 Getting order details for order {}", order_id);
+        info!("📝 Getting order details for order {}", order_id);
         let order_details = self.get_order_details(order_id).await?;
 
         // Check if the destination chain is starknet
@@ -852,28 +880,30 @@ impl OrderService {
             .create_order
             .destination_chain
             .starts_with("starknet");
-        // info!(
-        //     "🔍 Destination chain: {}, is starknet: {}",
-        //     order_details.result.create_order.destination_chain, is_starknet_destination
-        // );
+        info!(
+            "🔍 Destination chain: {}, is starknet: {}",
+            order_details.result.create_order.destination_chain, is_starknet_destination
+        );
 
-        // info!("📦 Creating redeem request for order {}", order_id);
+        info!("📦 Creating redeem request for order {}", order_id);
         let redeem_request = RedeemRequest {
             order_id: order_id.to_string(),
             secret: secret.to_string(),
             perform_on: "Destination".to_string(),
         };
-        // info!("✅ Redeem request created successfully");
+        info!("✅ Redeem request created successfully");
 
         // Use different URL based on destination chain
         let url = if is_starknet_destination {
-            "https://starknet-relayer.hashira.io/redeem"
+            // "https://starknet-relayer.hashira.io/redeem"
+            "https://starknet-relay.garden.finance/redeem"
         } else {
-            "https://evm-relay-stage.hashira.io/redeem"
+            // "https://evm-relay-stage.hashira.io/redeem"
+            "https://relayer.garden.finance/redeem"
         };
-        // info!("🔗 Using redeem URL: {}", url);
+        info!("🔗 Using redeem URL: {}", url);
 
-        // info!("📤 Sending redeem request for order {}", order_id);
+        info!("📤 Sending redeem request for order {}", order_id);
         let response = self
             .client
             .post(url)
@@ -886,10 +916,10 @@ impl OrderService {
 
         let status = response.status();
         let text = response.text().await?;
-        // info!(
-        //     "📥 Received redeem response for order {}: Status {}",
-        //     order_id, status
-        // );
+        info!(
+            "📥 Received redeem response for order {}: Status {}",
+            order_id, status
+        );
 
         if !status.is_success() {
             warn!(
@@ -1009,7 +1039,7 @@ impl OrderService {
     }
 
     pub async fn redeem_all_orders(&self, private_key: &str) -> Result<()> {
-        // info!("🔄 Starting to redeem all stored orders...");
+        info!("🔄 Starting to redeem all stored orders...");
 
         let order_data = file_utils::load_order_data()?;
         if order_data.is_empty() {
@@ -1023,7 +1053,7 @@ impl OrderService {
         let mut failed_redemptions = 0;
 
         for data in order_data {
-            // info!("🔄 Processing order {}...", data.order_id);
+            info!("🔄 Processing order {}...", data.order_id);
             match self.redeem_order(&data.order_id, &data.secret).await {
                 Ok(tx_hash) => {
                     info!(
@@ -1041,14 +1071,14 @@ impl OrderService {
             tokio::time::sleep(std::time::Duration::from_millis(100)).await;
         }
 
-        // info!("📊 Redemption Summary:");
-        // info!("  📈 Total orders: {}", total_orders);
-        // info!("  ✅ Successful: {}", successful_redemptions);
-        // info!("  ❌ Failed: {}", failed_redemptions);
-        // info!(
-        //     "  📊 Success rate: {:.2}%",
-        //     (successful_redemptions as f64 / total_orders as f64) * 100.0
-        // );
+        info!("📊 Redemption Summary:");
+        info!("  📈 Total orders: {}", total_orders);
+        info!("  ✅ Successful: {}", successful_redemptions);
+        info!("  ❌ Failed: {}", failed_redemptions);
+        info!(
+            "  📊 Success rate: {:.2}%",
+            (successful_redemptions as f64 / total_orders as f64) * 100.0
+        );
 
         Ok(())
     }

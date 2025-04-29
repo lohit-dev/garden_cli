@@ -283,153 +283,153 @@ pub async fn run() -> Result<()> {
         }
     }
 
-    // 🔧 Initiate Orders
-    if Confirm::new()
-        .with_prompt(
-            &style("⚙️ Do you want to initiate the created orders?")
-                .cyan()
-                .to_string(),
-        )
-        .default(true)
-        .interact()?
-    {
-        println!("{}", style("🔧 Initiating orders...").yellow());
+    // // 🔧 Initiate Orders
+    // if Confirm::new()
+    //     .with_prompt(
+    //         &style("⚙️ Do you want to initiate the created orders?")
+    //             .cyan()
+    //             .to_string(),
+    //     )
+    //     .default(true)
+    //     .interact()?
+    // {
+    //     println!("{}", style("🔧 Initiating orders...").yellow());
 
-        // Get private key for signing
-        let private_key: String = Input::new()
-            .with_prompt(
-                &style("🔑 Enter your private key (hex format)")
-                    .cyan()
-                    .to_string(),
-            )
-            .interact_text()?;
+    //     // Get private key for signing
+    //     let private_key: String = Input::new()
+    //         .with_prompt(
+    //             &style("🔑 Enter your private key (hex format)")
+    //                 .cyan()
+    //                 .to_string(),
+    //         )
+    //         .interact_text()?;
 
-        // Initialize the order service
-        let order_service = OrderService::new();
+    //     // Initialize the order service
+    //     let order_service = OrderService::new();
 
-        // Create a semaphore to limit concurrent requests
-        let semaphore = Arc::new(tokio::sync::Semaphore::new(num_clients as usize));
+    //     // Create a semaphore to limit concurrent requests
+    //     let semaphore = Arc::new(tokio::sync::Semaphore::new(num_clients as usize));
 
-        let mut tasks = FuturesUnordered::new();
+    //     let mut tasks = FuturesUnordered::new();
 
-        // Process each client's orders
-        for (order_id, _) in &order_ids {
-            let order_service_clone = order_service.clone();
-            let order_id_clone = order_id.clone();
-            let private_key_clone = private_key.clone();
-            let permit = semaphore.clone().acquire_owned().await.unwrap();
+    //     // Process each client's orders
+    //     for (order_id, _) in &order_ids {
+    //         let order_service_clone = order_service.clone();
+    //         let order_id_clone = order_id.clone();
+    //         let private_key_clone = private_key.clone();
+    //         let permit = semaphore.clone().acquire_owned().await.unwrap();
 
-            tasks.push(tokio::spawn(async move {
-                let result = order_service_clone
-                    .initiate_order(&order_id_clone, &private_key_clone)
-                    .await;
-                drop(permit);
-                (order_id_clone, result)
-            }));
-        }
+    //         tasks.push(tokio::spawn(async move {
+    //             let result = order_service_clone
+    //                 .initiate_order(&order_id_clone, &private_key_clone)
+    //                 .await;
+    //             drop(permit);
+    //             (order_id_clone, result)
+    //         }));
+    //     }
 
-        while let Some(result) = tasks.next().await {
-            match result {
-                Ok((order_id, Ok(tx_hash))) => {
-                    println!(
-                        "{}",
-                        style(format!("✅ Initiated order {}: {}", order_id, tx_hash)).green()
-                    );
-                }
-                Ok((order_id, Err(e))) => {
-                    println!(
-                        "{}",
-                        style(format!("❌ Failed to initiate order {}: {}", order_id, e)).red()
-                    );
-                }
-                Err(e) => {
-                    println!("{}", style(format!("❌ Task error: {}", e)).red());
-                }
-            }
-        }
-    } else {
-        println!("{}", style("⏭️ Skipping order initiation.").dim());
-    }
+    //     while let Some(result) = tasks.next().await {
+    //         match result {
+    //             Ok((order_id, Ok(tx_hash))) => {
+    //                 println!(
+    //                     "{}",
+    //                     style(format!("✅ Initiated order {}: {}", order_id, tx_hash)).green()
+    //                 );
+    //             }
+    //             Ok((order_id, Err(e))) => {
+    //                 println!(
+    //                     "{}",
+    //                     style(format!("❌ Failed to initiate order {}: {}", order_id, e)).red()
+    //                 );
+    //             }
+    //             Err(e) => {
+    //                 println!("{}", style(format!("❌ Task error: {}", e)).red());
+    //             }
+    //         }
+    //     }
+    // } else {
+    //     println!("{}", style("⏭️ Skipping order initiation.").dim());
+    // }
 
-    // 🎁 Redeem Orders
-    if Confirm::new()
-        .with_prompt(
-            &style("🎉 Do you want to redeem the orders?")
-                .cyan()
-                .to_string(),
-        )
-        .default(true)
-        .interact()?
-    {
-        println!("{}", style("💸 Redeeming orders...").yellow());
+    // // 🎁 Redeem Orders
+    // if Confirm::new()
+    //     .with_prompt(
+    //         &style("🎉 Do you want to redeem the orders?")
+    //             .cyan()
+    //             .to_string(),
+    //     )
+    //     .default(true)
+    //     .interact()?
+    // {
+    //     println!("{}", style("💸 Redeeming orders...").yellow());
 
-        // Initialize the order service
-        let order_service = OrderService::new();
+    //     // Initialize the order service
+    //     let order_service = OrderService::new();
 
-        // Create a semaphore to limit concurrent requests
-        let semaphore = Arc::new(tokio::sync::Semaphore::new(num_clients as usize));
+    //     // Create a semaphore to limit concurrent requests
+    //     let semaphore = Arc::new(tokio::sync::Semaphore::new(num_clients as usize));
 
-        let mut tasks = FuturesUnordered::new();
+    //     let mut tasks = FuturesUnordered::new();
 
-        for (order_id, secret) in &order_ids {
-            let order_service_clone = order_service.clone();
-            let order_id_clone = order_id.clone();
-            let secret_clone = secret.clone();
-            let permit = semaphore.clone().acquire_owned().await.unwrap();
+    //     for (order_id, secret) in &order_ids {
+    //         let order_service_clone = order_service.clone();
+    //         let order_id_clone = order_id.clone();
+    //         let secret_clone = secret.clone();
+    //         let permit = semaphore.clone().acquire_owned().await.unwrap();
 
-            tasks.push(tokio::spawn(async move {
-                // Use retry_redeem_order with 5 retry attempts instead of direct redeem_order
-                let result = order_service_clone
-                    .retry_redeem_order(&order_id_clone, &secret_clone, 10)
-                    .await;
-                drop(permit);
-                (order_id_clone, result)
-            }));
-        }
+    //         tasks.push(tokio::spawn(async move {
+    //             // Use retry_redeem_order with 5 retry attempts instead of direct redeem_order
+    //             let result = order_service_clone
+    //                 .retry_redeem_order(&order_id_clone, &secret_clone, 10)
+    //                 .await;
+    //             drop(permit);
+    //             (order_id_clone, result)
+    //         }));
+    //     }
 
-        while let Some(result) = tasks.next().await {
-            match result {
-                Ok((order_id, Ok(tx_hash))) => {
-                    println!(
-                        "{}",
-                        style(format!("✅ Redeemed order {}: {}", order_id, tx_hash)).green()
-                    );
-                }
-                Ok((order_id, Err(e))) => {
-                    println!(
-                        "{}",
-                        style(format!("❌ Failed to redeem order {}: {}", order_id, e)).red()
-                    );
-                }
-                Err(e) => {
-                    println!("{}", style(format!("❌ Task error: {}", e)).red());
-                }
-            }
-        }
+    //     while let Some(result) = tasks.next().await {
+    //         match result {
+    //             Ok((order_id, Ok(tx_hash))) => {
+    //                 println!(
+    //                     "{}",
+    //                     style(format!("✅ Redeemed order {}: {}", order_id, tx_hash)).green()
+    //                 );
+    //             }
+    //             Ok((order_id, Err(e))) => {
+    //                 println!(
+    //                     "{}",
+    //                     style(format!("❌ Failed to redeem order {}: {}", order_id, e)).red()
+    //                 );
+    //             }
+    //             Err(e) => {
+    //                 println!("{}", style(format!("❌ Task error: {}", e)).red());
+    //             }
+    //         }
+    //     }
 
-        // ✅ Final Success Message
-        println!(
-            "{}",
-            style(format!(
-                "✅ Congratulations! You have successfully created, initiated, and redeemed {} orders ({} clients × {} orders per client)!",
-                order_ids.len(),
-                num_clients,
-                orders_per_client
-            ))
-            .green()
-            .bold()
-        );
-        println!(
-            "{}",
-            style("🌐 You can now view the order status in the dashboard.").blue()
-        );
-        println!(
-            "{}",
-            style("🙏 Thank you for using the Garden SDK CLI Application!").magenta()
-        );
-    } else {
-        println!("{}", style("⏭️ Skipping order redemption.").dim());
-    }
+    //     // ✅ Final Success Message
+    //     println!(
+    //         "{}",
+    //         style(format!(
+    //             "✅ Congratulations! You have successfully created, initiated, and redeemed {} orders ({} clients × {} orders per client)!",
+    //             order_ids.len(),
+    //             num_clients,
+    //             orders_per_client
+    //         ))
+    //         .green()
+    //         .bold()
+    //     );
+    //     println!(
+    //         "{}",
+    //         style("🌐 You can now view the order status in the dashboard.").blue()
+    //     );
+    //     println!(
+    //         "{}",
+    //         style("🙏 Thank you for using the Garden SDK CLI Application!").magenta()
+    //     );
+    // } else {
+    //     println!("{}", style("⏭️ Skipping order redemption.").dim());
+    // }
 
     Ok(())
 }

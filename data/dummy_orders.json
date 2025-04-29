@@ -1,13 +1,18 @@
 {
   "quotes": [
     {
-      "order_pair": "arbitrum_sepolia:0x795Dcb58d1cd4789169D5F938Ea05E17ecEB68cA::starknet_sepolia:0x58ea74e863bc9a761aa20701e04b65854f5614db3eb79b2d3a76a8771694c02",
+      "order_pair": "arbitrum_sepolia:0xD5FeDb4ceCB0F1D32788a190d9EB47D94D23eE4e::starknet_sepolia:0x06579d255314109429a4477d89629bc2b94f529ae01979c2f8014f9246482603",
       "amount": "10000",
       "exact_out": false
     },
     {
-      "order_pair": "starknet_sepolia:0x58ea74e863bc9a761aa20701e04b65854f5614db3eb79b2d3a76a8771694c02::arbitrum_sepolia:0x795Dcb58d1cd4789169D5F938Ea05E17ecEB68cA",
-      "amount": "1000000000000000",
+      "order_pair": "starknet_sepolia:0x06579d255314109429a4477d89629bc2b94f529ae01979c2f8014f9246482603::arbitrum_sepolia:0xD5FeDb4ceCB0F1D32788a190d9EB47D94D23eE4e",
+      "amount": "50000",
+      "exact_out": false
+    },
+    {
+      "order_pair": "bitcoin:primary::starknet:0x7defd8eb3b770005ab1ca5f89ad31f98fb5bc3c52deaeafd130be3b49f967b4",
+      "amount": "10000",
       "exact_out": false
     }
   ]
