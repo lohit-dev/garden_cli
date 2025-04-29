@@ -25,7 +25,7 @@ pub async fn run_continuous_orders() -> Result<()> {
             .to_string(),
     )?;
     term.write_line(
-        &style("🔄 This will create orders in a continuous loop")
+        &style("🔄 This will create, initiate, and redeem orders in a continuous loop")
             .yellow()
             .dim()
             .to_string(),
@@ -122,6 +122,16 @@ pub async fn run_continuous_orders() -> Result<()> {
         .default(5)
         .interact_text()?;
 
+    // Get delay between operation steps (create -> initiate -> redeem)
+    let step_delay_seconds: u64 = Input::new()
+        .with_prompt(
+            &style("⏱️ Delay between operation steps (seconds)")
+                .cyan()
+                .to_string(),
+        )
+        .default(2)
+        .interact_text()?;
+
     // Initialize the order service
     let order_service = OrderService::new();
 
@@ -157,10 +167,11 @@ pub async fn run_continuous_orders() -> Result<()> {
         // STEP 1: Get quote
         println!("{}", style("📦 Getting quote...").yellow());
 
-        match order_service
+        let quote_result = order_service
             .get_quote(&quote.order_pair, &quote.amount, quote.exact_out)
-            .await
-        {
+            .await;
+
+        match quote_result {
             Ok((strategy_id, input_price, output_price, destination_amount)) => {
                 println!(
                     "{}",
@@ -186,7 +197,7 @@ pub async fn run_continuous_orders() -> Result<()> {
                 // STEP 2: Create order
                 println!("{}", style("📦 Creating order...").yellow());
 
-                match order_service
+                let create_result = order_service
                     .create_order_with_custom_addresses(
                         strategy_id,
                         input_price,
@@ -199,8 +210,9 @@ pub async fn run_continuous_orders() -> Result<()> {
                         &initiator_destination_address,
                         private_key.clone(),
                     )
-                    .await
-                {
+                    .await;
+
+                match create_result {
                     Ok((order_id, secret)) => {
                         println!(
                             "{}",
@@ -212,6 +224,134 @@ pub async fn run_continuous_orders() -> Result<()> {
                             "{}",
                             style(format!("🔑 Order secret: {}", secret)).green().dim()
                         );
+
+                        // Wait before initiating
+                        println!(
+                            "{}",
+                            style(format!(
+                                "⏱️ Waiting {} seconds before initiating order...",
+                                step_delay_seconds
+                            ))
+                            .dim()
+                        );
+                        tokio::time::sleep(Duration::from_secs(step_delay_seconds)).await;
+
+                        // STEP 3: Initiate order
+                        println!("{}", style("🚀 Initiating order...").yellow());
+
+                        match order_service.initiate_order(&order_id, &private_key).await {
+                            Ok(tx_hash) => {
+                                println!(
+                                    "{}",
+                                    style(format!(
+                                        "✅ Order initiated with transaction hash: {}",
+                                        tx_hash
+                                    ))
+                                    .green()
+                                    .bold()
+                                );
+
+                                // Wait before checking if order is ready for redemption
+                                println!(
+                                    "{}",
+                                    style("⏳ Waiting for order to be ready for redemption...")
+                                        .yellow()
+                                );
+
+                                // Poll for order readiness with a timeout
+                                let max_poll_attempts = 10;
+                                let mut is_ready = false;
+
+                                for attempt in 1..=max_poll_attempts {
+                                    println!(
+                                        "{}",
+                                        style(format!("🔍 Checking if order is ready for redemption (attempt {}/{})", 
+                                            attempt, max_poll_attempts))
+                                        .dim()
+                                    );
+
+                                    match order_service
+                                        .is_order_ready_for_redemption(&order_id)
+                                        .await
+                                    {
+                                        Ok(ready) => {
+                                            if ready {
+                                                is_ready = true;
+                                                println!(
+                                                    "{}",
+                                                    style("✅ Order is ready for redemption!")
+                                                        .green()
+                                                );
+                                                break;
+                                            }
+
+                                            println!(
+                                                "{}",
+                                                style("⏳ Order not yet ready for redemption, waiting...")
+                                                    .yellow()
+                                            );
+                                        }
+                                        Err(e) => {
+                                            println!(
+                                                "{}",
+                                                style(format!(
+                                                    "⚠️ Error checking order readiness: {}",
+                                                    e
+                                                ))
+                                                .yellow()
+                                            );
+                                        }
+                                    }
+
+                                    // Wait before next check
+                                    tokio::time::sleep(Duration::from_secs(step_delay_seconds))
+                                        .await;
+                                }
+
+                                if is_ready {
+                                    // STEP 4: Redeem order
+                                    println!("{}", style("💎 Redeeming order...").yellow());
+
+                                    // Use retry_redeem_order for better reliability
+                                    let max_redeem_attempts = 3;
+                                    match order_service
+                                        .retry_redeem_order(&order_id, &secret, max_redeem_attempts)
+                                        .await
+                                    {
+                                        Ok(redeem_tx_hash) => {
+                                            println!(
+                                                "{}",
+                                                style(format!(
+                                                    "✅ Order redeemed with transaction hash: {}",
+                                                    redeem_tx_hash
+                                                ))
+                                                .green()
+                                                .bold()
+                                            );
+                                        }
+                                        Err(e) => {
+                                            println!(
+                                                "{}",
+                                                style(format!("❌ Failed to redeem order: {}", e))
+                                                    .red()
+                                            );
+                                        }
+                                    }
+                                } else {
+                                    println!(
+                                        "{}",
+                                        style("⚠️ Order not ready for redemption after maximum attempts, continuing to next iteration")
+                                            .yellow()
+                                    );
+                                }
+                            }
+                            Err(e) => {
+                                println!(
+                                    "{}",
+                                    style(format!("❌ Failed to initiate order: {}", e)).red()
+                                );
+                            }
+                        }
                     }
                     Err(e) => {
                         println!(

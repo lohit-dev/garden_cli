@@ -444,86 +444,8 @@ impl OrderService {
                                 "Successfully created order"
                             );
 
-                            // STEP 2: Initiate the order
-                            tracing::info!(order_id = %order_id, "Initiating order");
-
-                            // Initiate the order
-                            match self.initiate_order(&order_id, &private_key).await {
-                                Ok(tx_hash) => {
-                                    tracing::info!(
-                                        order_id = %order_id,
-                                        tx_hash = %tx_hash,
-                                        "Successfully initiated order"
-                                    );
-
-                                    // STEP 3: Wait for order to be ready for redemption
-                                    tracing::info!(order_id = %order_id, "Waiting for order to be ready for redemption");
-
-                                    // Wait for the order to be ready for redemption with a timeout
-                                    let start_time = std::time::Instant::now();
-                                    let timeout = std::time::Duration::from_secs(10000);
-
-                                    let mut is_ready = false;
-                                    while start_time.elapsed() < timeout {
-                                        match self.is_order_ready_for_redemption(&order_id).await {
-                                            Ok(ready) => {
-                                                if ready {
-                                                    is_ready = true;
-                                                    break;
-                                                }
-                                            }
-                                            Err(e) => {
-                                                tracing::warn!(
-                                                    order_id = %order_id,
-                                                    error = %e,
-                                                    "Error checking if order is ready"
-                                                );
-                                            }
-                                        }
-
-                                        // Wait 5 seconds before checking again
-                                        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-                                    }
-
-                                    if !is_ready {
-                                        tracing::warn!(
-                                            order_id = %order_id,
-                                            "Order not ready for redemption within timeout period"
-                                        );
-                                        return Ok((order_id, secret));
-                                    }
-
-                                    // STEP 4: Redeem the order
-                                    tracing::info!(order_id = %order_id, "Redeeming order");
-
-                                    match self.retry_redeem_order(&order_id, &secret, 5).await {
-                                        Ok(redeem_tx_hash) => {
-                                            tracing::info!(
-                                                order_id = %order_id,
-                                                tx_hash = %redeem_tx_hash,
-                                                "Successfully redeemed order"
-                                            );
-                                        }
-                                        Err(e) => {
-                                            tracing::warn!(
-                                                order_id = %order_id,
-                                                error = %e,
-                                                "Failed to redeem order"
-                                            );
-                                        }
-                                    }
-
-                                    Ok((order_id, secret))
-                                }
-                                Err(e) => {
-                                    tracing::warn!(
-                                        order_id = %order_id,
-                                        error = %e,
-                                        "Failed to initiate order"
-                                    );
-                                    Ok((order_id, secret))
-                                }
-                            }
+                            // Return the order ID and secret
+                            Ok((order_id, secret))
                         } else {
                             warn!("❌ No order ID in response");
                             Err(eyre::eyre!("No order ID in response"))
@@ -560,7 +482,7 @@ impl OrderService {
         };
 
         let url = format!(
-            "https://testnet.api.hashira.io/quote?order_pair={}&amount={}&exact_out={}",
+            "https://testnet.api.hashira.io/quote/?order_pair={}&amount={}&exact_out={}",
             quote_request.order_pair, quote_request.amount, quote_request.exact_out
         );
 
