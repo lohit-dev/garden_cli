@@ -560,7 +560,7 @@ impl OrderService {
         };
 
         let url = format!(
-            "https://testnet.api.hashira.io/quote?order_pair={}&amount={}&exact_out={}",
+            "https://testnet.api.hashira.io/quote/?order_pair={}&amount={}&exact_out={}",
             quote_request.order_pair, quote_request.amount, quote_request.exact_out
         );
 

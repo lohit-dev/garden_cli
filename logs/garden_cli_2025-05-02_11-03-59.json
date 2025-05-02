@@ -1,0 +1,1 @@
+{"timestamp":"2025-05-02T05:33:59.756959726+00:00","level":"INFO","fields":{"message":"JSON logging initialized to file: \"logs/garden_cli_2025-05-02_11-03-59.json\""},"target":"garden_cli::utils::logging"}
